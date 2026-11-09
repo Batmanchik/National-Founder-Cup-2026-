@@ -5,7 +5,8 @@
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "install-app": "node scripts/install-windows.js"
   },
   "license": "MIT",
   "dependencies": {

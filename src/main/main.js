@@ -1,40 +1,47 @@
-// Главный процесс Electron: прозрачное окно-оверлей поверх всего экрана, трей, трекинг активности, ИИ.
+// Главный процесс Electron: окно управления, прозрачный оверлей с Акылом, трей, трекинг активности, ИИ.
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu, desktopCapturer, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu, desktopCapturer, globalShortcut, safeStorage } = require('electron');
 const { ActivityWatcher } = require('./activity');
 const { classify } = require('./classifier');
 const { Session } = require('./session');
 const { Store } = require('./store');
+const { SettingsStore } = require('./settings');
 const mentor = require('./mentor');
 const { makeTrayIcon } = require('./icon');
 
 const TICK_MS = 2000;
-const VISION_INTERVAL_SEC = Number(process.env.NAZAR_VISION_INTERVAL_SEC) || 45;
+const HIDDEN_START = process.argv.includes('--hidden'); // автозапуск при входе в Windows: без окна управления
 
 if (process.platform === 'linux') {
   app.commandLine.appendSwitch('enable-transparent-visuals');
   app.disableHardwareAcceleration();
 }
-if (!app.requestSingleInstanceLock()) app.quit();
+if (!app.requestSingleInstanceLock()) app.exit(0);
 
-let win = null;
+let win = null; // оверлей с Акылом; существует, только пока Акыл включён
+let panel = null; // обычное окно управления
 let tray = null;
 let store = null;
+let settings = null;
 let session = null;
-let visionEnabled = process.env.NAZAR_VISION === 'on';
+let quitting = false;
+let visionEnabled = false;
 let lastVision = null; // { on_task, activity, confidence, comment, at, key }
+let tickTimer = null;
+let visionTimer = null;
 const windowCache = new Map(); // ключ окна -> вердикт ИИ
 const pendingWindow = new Set();
 let chatHistory = [];
 const watcher = new ActivityWatcher();
 
-const send = (channel, data) => win && !win.isDestroyed() && win.webContents.send(channel, data);
+const mentorOn = () => Boolean(win && !win.isDestroyed());
+const send = (channel, data) => mentorOn() && win.webContents.send(channel, data);
 const winKey = (w) => `${w.app}|${w.title}|${w.url}`;
 const say = (text, opts = {}) => send('buddy-say', { text, ...opts });
 
-function createWindow() {
+function createOverlay() {
   const { workArea } = screen.getPrimaryDisplay();
   win = new BrowserWindow({
     x: workArea.x,
@@ -64,6 +71,112 @@ function createWindow() {
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 }
 
+function restartVisionTimer() {
+  clearInterval(visionTimer);
+  visionTimer = mentorOn() ? setInterval(visionTick, settings.data.visionIntervalSec * 1000) : null;
+}
+
+function startMentor() {
+  if (mentorOn()) return;
+  createOverlay();
+  watcher.start();
+  tickTimer = setInterval(tick, TICK_MS);
+  restartVisionTimer();
+  globalShortcut.register('CommandOrControl+Shift+Space', openChat);
+  globalShortcut.register('CommandOrControl+Shift+9', demo.distract);
+  globalShortcut.register('CommandOrControl+Shift+0', demo.work);
+  buildTrayMenu();
+  notifyPanel();
+}
+
+// Выключение сохраняет незавершённую сессию в историю, чтобы время не пропало.
+function stopMentor() {
+  if (!mentorOn()) return;
+  if (session) {
+    store.addSession(session.summary());
+    session = null;
+  }
+  clearInterval(tickTimer);
+  clearInterval(visionTimer);
+  tickTimer = visionTimer = null;
+  globalShortcut.unregisterAll();
+  watcher.stop();
+  win.destroy();
+  win = null;
+  buildTrayMenu();
+  notifyPanel();
+}
+
+function toggleMentor() {
+  if (mentorOn()) stopMentor();
+  else startMentor();
+}
+
+function openPanel() {
+  if (panel && !panel.isDestroyed()) {
+    panel.show();
+    panel.focus();
+    return;
+  }
+  panel = new BrowserWindow({
+    width: 620,
+    height: 800,
+    minWidth: 520,
+    minHeight: 520,
+    title: 'Nazar',
+    icon: makeTrayIcon(),
+    autoHideMenuBar: true,
+    show: false,
+    backgroundColor: '#f4f4e8',
+    webPreferences: {
+      preload: path.join(__dirname, '..', 'panel-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  panel.once('ready-to-show', () => panel.show());
+  // Пока Акыл включён, крестик только прячет окно в трей. Если Акыл выключен, приложение закрывается.
+  panel.on('close', (e) => {
+    if (quitting) return;
+    if (mentorOn()) {
+      e.preventDefault();
+      panel.hide();
+    } else {
+      app.quit();
+    }
+  });
+  panel.on('closed', () => (panel = null));
+  panel.loadFile(path.join(__dirname, '..', 'renderer', 'panel.html'));
+}
+
+function panelState() {
+  return {
+    mentorOn: mentorOn(),
+    goal: session ? session.goal : null,
+    settings: settings.view(),
+    ai: mentor.hasAI(),
+    canAutostart: app.isPackaged,
+    canEncrypt: safeStorage.isEncryptionAvailable(),
+  };
+}
+
+function notifyPanel() {
+  if (panel && !panel.isDestroyed()) panel.webContents.send('panel-state', panelState());
+}
+
+function applySettings() {
+  const s = settings.data;
+  mentor.configure({ apiKey: settings.apiKey(), model: s.model, lines: { drift: s.driftLines, back: s.backLines } });
+  visionEnabled = s.vision && mentor.hasAI();
+  windowCache.clear();
+  if (session) session.setDriftSec(s.driftSec);
+  restartVisionTimer();
+  if (app.isPackaged) app.setLoginItemSettings({ openAtLogin: s.autoStart, args: ['--hidden'] });
+  buildTrayMenu();
+  if (mentorOn()) send('state', liveState());
+}
+
 function liveState() {
   return {
     session: session ? session.live() : null,
@@ -78,7 +191,7 @@ function liveState() {
 
 // Итоговый вердикт по окну: правила -> кэш ИИ по заголовку -> свежий анализ скриншота.
 function verdictFor(w) {
-  let v = classify(w, session.goal);
+  let v = classify(w, session.goal, { focus: settings.data.focusSites, distract: settings.data.distractSites });
   const key = winKey(w);
   if (v.soft && mentor.hasAI()) {
     const cached = windowCache.get(key);
@@ -91,7 +204,7 @@ function verdictFor(w) {
       });
     }
   }
-  if (lastVision && lastVision.key === key && Date.now() - lastVision.at < VISION_INTERVAL_SEC * 2000) {
+  if (lastVision && lastVision.key === key && Date.now() - lastVision.at < settings.data.visionIntervalSec * 2000) {
     if (lastVision.on_task && lastVision.confidence >= 0.6) v = { ...v, category: 'focus', reason: `зрение: ${lastVision.activity}` };
     else if (!lastVision.on_task && lastVision.confidence >= 0.6 && v.category !== 'focus')
       v = { ...v, category: 'distraction', reason: `зрение: ${lastVision.activity}` };
@@ -135,11 +248,12 @@ async function visionTick() {
 
 function startSession({ goal, minutes, vision }) {
   if (typeof vision === 'boolean') visionEnabled = vision;
-  session = new Session({ goal, minutes });
+  session = new Session({ goal, minutes, driftSec: settings.data.driftSec });
   chatHistory = [];
   lastVision = null;
   say(mentor.line('start', { goal: session.goal }), { mood: 'happy', action: 'jump' });
   buildTrayMenu();
+  notifyPanel();
   return liveState();
 }
 
@@ -149,6 +263,7 @@ function endSession() {
   store.addSession(summary);
   session = null;
   buildTrayMenu();
+  notifyPanel();
   const report = { summary, profile: store.profile() };
   send('report', report);
   mentor.reportInsight(summary).then((text) => send('report-insight', { id: summary.id, text }));
@@ -169,12 +284,16 @@ function applyAction(res) {
 
 function buildTrayMenu() {
   if (!tray) return;
+  const on = mentorOn();
   tray.setContextMenu(
     Menu.buildFromTemplate([
+      { label: 'Открыть Nazar', click: openPanel },
+      { label: on ? 'Выключить Акыла' : 'Включить Акыла', click: toggleMentor },
+      { type: 'separator' },
       { label: session ? `🎯 ${session.goal}` : 'Нет активной сессии', enabled: false },
-      { label: 'Новая сессия…', click: () => send('open-onboarding') },
+      { label: 'Новая сессия…', enabled: on, click: () => send('open-onboarding') },
       { label: 'Завершить сессию и показать чек', enabled: Boolean(session), click: endSession },
-      { label: 'Чат с Акылом  (Ctrl+Shift+Space)', click: () => openChat() },
+      { label: 'Чат с Акылом  (Ctrl+Shift+Space)', enabled: on, click: () => openChat() },
       { type: 'separator' },
       {
         label: 'Зрение: анализ экрана ИИ',
@@ -186,8 +305,8 @@ function buildTrayMenu() {
           send('state', liveState());
         },
       },
-      { label: 'Демо: отвлечение на Reels  (Ctrl+Shift+9)', click: () => demo.distract() },
-      { label: 'Демо: работа в VS Code  (Ctrl+Shift+0)', click: () => demo.work() },
+      { label: 'Демо: отвлечение на Reels  (Ctrl+Shift+9)', enabled: on, click: () => demo.distract() },
+      { label: 'Демо: работа в VS Code  (Ctrl+Shift+0)', enabled: on, click: () => demo.work() },
       { type: 'separator' },
       { label: 'Выход', click: () => app.quit() },
     ])
@@ -202,13 +321,13 @@ const demo = {
 global.nazarDemo = demo;
 
 function openChat() {
-  if (!win) return;
+  if (!mentorOn()) return;
   win.focus();
   send('toggle-chat');
 }
 
 ipcMain.on('set-interactive', (_e, on) => {
-  if (!win) return;
+  if (!mentorOn()) return;
   if (on) win.setIgnoreMouseEvents(false);
   else win.setIgnoreMouseEvents(true, { forward: true });
 });
@@ -228,22 +347,60 @@ ipcMain.handle('chat', async (_e, text) => {
   return res;
 });
 
+// Окно управления
+ipcMain.handle('panel-get', () => panelState());
+ipcMain.handle('panel-toggle', () => {
+  toggleMentor();
+  return panelState();
+});
+ipcMain.handle('panel-save', (_e, patch) => {
+  try {
+    settings.update(patch || {});
+    applySettings();
+    return { ok: true, state: panelState() };
+  } catch (err) {
+    return { ok: false, error: err.message, state: panelState() };
+  }
+});
+ipcMain.handle('panel-reset', () => {
+  settings.reset();
+  applySettings();
+  return panelState();
+});
+
+function envDefaults() {
+  const out = {};
+  if (process.env.NAZAR_DRIFT_SEC) out.driftSec = process.env.NAZAR_DRIFT_SEC;
+  if (process.env.NAZAR_MODEL) out.model = process.env.NAZAR_MODEL;
+  if (process.env.NAZAR_VISION) out.vision = process.env.NAZAR_VISION === 'on';
+  if (process.env.NAZAR_VISION_INTERVAL_SEC) out.visionIntervalSec = process.env.NAZAR_VISION_INTERVAL_SEC;
+  return out;
+}
+
+app.on('second-instance', () => openPanel());
+app.on('before-quit', () => (quitting = true));
+app.on('window-all-closed', () => {}); // приложение живёт в трее, закрытие окон его не завершает
+
 app.whenReady().then(() => {
   store = new Store(app.getPath('userData'));
-  createWindow();
+  const crypto = safeStorage.isEncryptionAvailable()
+    ? {
+        encrypt: (text) => safeStorage.encryptString(text).toString('base64'),
+        decrypt: (b64) => safeStorage.decryptString(Buffer.from(b64, 'base64')),
+      }
+    : null;
+  settings = new SettingsStore(app.getPath('userData'), crypto, envDefaults());
   tray = new Tray(makeTrayIcon());
   tray.setToolTip('Nazar — ментор Акыл');
-  buildTrayMenu();
-  globalShortcut.register('CommandOrControl+Shift+Space', openChat);
-  globalShortcut.register('CommandOrControl+Shift+9', demo.distract);
-  globalShortcut.register('CommandOrControl+Shift+0', demo.work);
-  watcher.start();
-  setInterval(tick, TICK_MS);
-  setInterval(visionTick, VISION_INTERVAL_SEC * 1000);
-  if (process.platform === 'darwin' && app.dock) app.dock.hide();
+  tray.on('click', openPanel);
+  applySettings();
+  if (settings.data.startMentorOnOpen || HIDDEN_START) startMentor();
+  if (!HIDDEN_START) openPanel();
+  if (process.platform === 'darwin' && app.dock && HIDDEN_START) app.dock.hide();
 });
 
 app.on('will-quit', () => {
+  stopMentor();
   globalShortcut.unregisterAll();
   watcher.stop();
 });

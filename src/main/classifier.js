@@ -39,7 +39,8 @@ function goalStems(goal) {
     .map((w) => w.slice(0, Math.max(4, w.length - 2)));
 }
 
-function classify(win, goal) {
+// custom: { focus: [...], distract: [...] } — свои слова и сайты из настроек, важнее встроенных правил.
+function classify(win, goal, custom = {}) {
   const app = (win && win.app) || '';
   const title = (win && win.title) || '';
   const url = (win && win.url) || '';
@@ -51,6 +52,13 @@ function classify(win, goal) {
   const lowered = `${title} ${url}`.toLowerCase();
   const stem = goalStems(goal).find((s) => lowered.includes(s));
   if (stem) return { category: 'focus', label: 'По цели', reason: `в заголовке есть «${stem}»`, soft: false };
+
+  const hay = text.toLowerCase();
+  const hit = (list) => (list || []).find((word) => word && hay.includes(String(word).toLowerCase()));
+  const myFocus = hit(custom.focus);
+  if (myFocus) return { category: 'focus', label: myFocus, reason: 'мой список работы', soft: false };
+  const myDistract = hit(custom.distract);
+  if (myDistract) return { category: 'distraction', label: myDistract, reason: 'мой список отвлечений', soft: false };
 
   for (const rule of DISTRACTION) {
     if (rule.re.test(text)) return { category: 'distraction', label: rule.label, reason: 'список отвлечений', soft: false };

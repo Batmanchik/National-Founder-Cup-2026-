@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; font-src 'self'; img-src 'self' data:; script-src 'self'" />
+    <title>Nazar</title>
+    <link rel="stylesheet" href="panel.css" />
+  </head>
+  <body>
+    <header class="top">
+      <canvas id="akyl" width="16" height="19"></canvas>
+      <div class="who">
+        <h1>NAZAR</h1>
+        <p id="status" role="status"></p>
+      </div>
+      <button id="toggle" class="big" type="button"></button>
+    </header>
+
+    <form id="form" autocomplete="off">
+      <section>
+        <h2>Запуск</h2>
+        <label class="check"><input type="checkbox" id="startMentorOnOpen" /> Включать Акыла при открытии Nazar</label>
+        <label class="check"><input type="checkbox" id="autoStart" /> Запускать Nazar при входе в Windows</label>
+      </section>
+
+      <section>
+        <h2>Поведение</h2>
+        <div class="field">
+          <label for="driftSec">Напоминать через, секунд</label>
+          <input id="driftSec" type="number" min="5" max="300" step="1" />
+          <small>От 5 до 300. Для демо удобно 5–10.</small>
+        </div>
+      </section>
+
+      <section>
+        <h2>Что считать работой и отвлечением</h2>
+        <div class="field">
+          <label for="focusSites">Работа</label>
+          <textarea id="focusSites" rows="3" placeholder="wikipedia&#10;my-university.kz"></textarea>
+          <small>По одному слову или сайту в строке. Ищется в заголовке окна.</small>
+        </div>
+        <div class="field">
+          <label for="distractSites">Отвлечение</label>
+          <textarea id="distractSites" rows="3" placeholder="kaspi магазин&#10;ozon"></textarea>
+        </div>
+      </section>
+
+      <section>
+        <h2>Фразы Акыла</h2>
+        <div class="field">
+          <label for="driftLines">Когда ты отвлёкся</label>
+          <textarea id="driftLines" rows="3" placeholder="Эй, цель была «{goal}»!"></textarea>
+          <small>По одной фразе в строке. {goal} заменится на цель, {label} на отвлечение. Пусто значит стандартные.</small>
+        </div>
+        <div class="field">
+          <label for="backLines">Когда ты вернулся</label>
+          <textarea id="backLines" rows="2" placeholder="Красава, продолжаем!"></textarea>
+        </div>
+      </section>
+
+      <section>
+        <h2>ИИ</h2>
+        <p id="ai-state" class="note"></p>
+        <div class="field">
+          <label for="apiKey">Ключ Claude API</label>
+          <div class="row">
+            <input id="apiKey" type="password" spellcheck="false" />
+            <button id="clear-key" type="button" class="ghost" hidden>Удалить ключ</button>
+          </div>
+          <small>Ключ хранится на этом компьютере в зашифрованном виде.</small>
+        </div>
+        <div class="field">
+          <label for="model">Модель</label>
+          <select id="model">
+            <option value="claude-opus-5-5">Claude Opus 5.5</option>
+            <option value="claude-sonnet-5-5">Claude Sonnet 5.5</option>
+            <option value="claude-haiku-5-5">Claude Haiku 5.5</option>
+          </select>
+        </div>
+        <label class="check"><input type="checkbox" id="vision" /> Включать зрение: ИИ смотрит на скриншоты экрана</label>
+        <div class="field">
+          <label for="visionIntervalSec">Скриншот раз в, секунд</label>
+          <input id="visionIntervalSec" type="number" min="15" max="600" step="1" />
+        </div>
+      </section>
+    </form>
+
+    <footer>
+      <button id="reset" type="button" class="ghost">Вернуть по умолчанию</button>
+      <span id="saved" role="status"></span>
+      <button id="save" type="button" class="primary">Сохранить</button>
+    </footer>
+
+    <script src="../shared/sprites.js"></script>
+    <script src="panel.js"></script>
+  </body>
+</html>

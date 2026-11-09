@@ -7,8 +7,9 @@ const DRIFT_LONG_SEC = 120; // второе, более настойчивое �
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(v) || lo)));
 
 class Session {
-  constructor({ goal, minutes, now = Date.now() }) {
+  constructor({ goal, minutes, driftSec, now = Date.now() }) {
     this.id = String(now);
+    this.setDriftSec(driftSec);
     this.goal = String(goal || '').trim() || 'Без цели';
     this.plannedMin = clamp(minutes || 25, 5, 240);
     this.startedAt = now;
@@ -25,6 +26,11 @@ class Session {
     this.returns = 0;
     this.breaks = 0;
     this.breakUntil = 0;
+  }
+
+  setDriftSec(sec) {
+    this.driftNudgeSec = Number(sec) || DRIFT_NUDGE_SEC;
+    this.driftLongSec = Math.max(DRIFT_LONG_SEC, this.driftNudgeSec * 2);
   }
 
   isOnBreak(now = Date.now()) {
@@ -63,11 +69,11 @@ class Session {
     if (cat === 'distraction') {
       this.distractors[verdict.label] = (this.distractors[verdict.label] || 0) + dt;
       this.driftStreak += dt;
-      if (!this.driftNotified && this.driftStreak >= DRIFT_NUDGE_SEC) {
+      if (!this.driftNotified && this.driftStreak >= this.driftNudgeSec) {
         this.driftNotified = true;
         this.nudges += 1;
         events.push('drift');
-      } else if (this.driftNotified && !this.longNotified && this.driftStreak >= DRIFT_LONG_SEC) {
+      } else if (this.driftNotified && !this.longNotified && this.driftStreak >= this.driftLongSec) {
         this.longNotified = true;
         events.push('drift-long');
       }
