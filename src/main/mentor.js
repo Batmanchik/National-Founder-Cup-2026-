@@ -3,12 +3,22 @@
 // Без ключа работает офлайн на шаблонах, поэтому демо не ломается без интернета.
 const Anthropic = require('@anthropic-ai/sdk').default;
 
-const MODEL = process.env.NAZAR_MODEL || 'claude-opus-5-5';
+let MODEL = process.env.NAZAR_MODEL || 'claude-opus-5-5';
 // Модели, для которых включаем серверный фолбэк при отказе (refusal).
 const FALLBACK_MODELS = new Set(['claude-opus-5-5', 'claude-opus-5', 'claude-fable-5-1', 'claude-sonnet-5-5']);
 
-const client = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
+let client = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
 let useFallbacks = FALLBACK_MODELS.has(MODEL);
+let customLines = {}; // свои реплики из настроек: { drift: [...], back: [...] }
+
+// Применяет настройки на лету. Ключ из настроек важнее ключа из .env.
+function configure({ apiKey, model, lines } = {}) {
+  if (model) MODEL = model;
+  const key = apiKey || process.env.ANTHROPIC_API_KEY;
+  client = key ? new Anthropic({ apiKey: key }) : null;
+  useFallbacks = FALLBACK_MODELS.has(MODEL);
+  customLines = lines || {};
+}
 
 const PERSONA = `Ты — Акыл, маленький пиксельный ментор приложения Nazar. Ты живёшь внизу экрана ноутбука пользователя.
 Твоя задача: помочь человеку удержать цель, которую он сам назвал, и честно показывать, куда уходит его внимание.
@@ -137,7 +147,8 @@ const LINES = {
 };
 
 function line(kind, vars = {}) {
-  return pick(LINES[kind] || ['…']).replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
+  const own = customLines[kind];
+  return pick(own && own.length ? own : LINES[kind] || ['…']).replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 }
 
 // Офлайн-чат: понимает базовые просьбы по ключевым словам.
@@ -229,4 +240,15 @@ async function reportInsight(summary) {
   return `Фокус ${summary.focusScore}%. ${worst ? `Больше всего внимания забрал «${worst.label}». В следующий раз закрой его до старта.` : 'Попробуй сессию покороче — 25 минут.'}`;
 }
 
-module.exports = { chat, classifyWindow, analyzeScreen, reportInsight, line, hasAI: () => Boolean(client), MODEL };
+module.exports = {
+  chat,
+  classifyWindow,
+  analyzeScreen,
+  reportInsight,
+  line,
+  configure,
+  hasAI: () => Boolean(client),
+  get MODEL() {
+    return MODEL;
+  },
+};
