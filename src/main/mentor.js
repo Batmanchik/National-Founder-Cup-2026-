@@ -94,7 +94,16 @@ async function callClaude({ system, messages, schema, maxTokens = 2000 }) {
 }
 
 function fmtMin(sec) {
-  return `${Math.round(sec / 60)} мин`;
+  return sec < 60 ? `${Math.round(sec)} сек` : `${Math.round(sec / 60)} мин`;
+}
+
+// «1 минуту», «2 минуты», «5 минут»
+function minutesWord(n) {
+  const d = n % 10;
+  const dd = n % 100;
+  if (d === 1 && dd !== 11) return `${n} минуту`;
+  if (d >= 2 && d <= 4 && (dd < 12 || dd > 14)) return `${n} минуты`;
+  return `${n} минут`;
 }
 
 function contextText(ctx) {
@@ -135,9 +144,17 @@ function line(kind, vars = {}) {
 function offlineChat(text, ctx) {
   const t = text.toLowerCase();
   const num = Number((t.match(/\d+/) || [])[0]) || 0;
-  if (/перерыв|отдох|устал|демалыс/.test(t)) return { reply: `Окей, ${num || 5} минут отдыха. Потом обратно к «${ctx.goal}».`, action: 'break', minutes: num || 5 };
-  if (/законч|готово|сделал|всё|бітті/.test(t)) return { reply: 'Отлично! Сейчас покажу твой чек внимания.', action: 'end_session', minutes: 0 };
-  if (/продл|ещё|еще|больше времени/.test(t)) return { reply: `Добавил ${num || 15} минут. Держим темп!`, action: 'extend', minutes: num || 15 };
+  const limit = (v, lo, hi) => Math.min(hi, Math.max(lo, v)); // те же пределы, что в session.js
+  if (/перерыв|отдох|устал|демалыс/.test(t)) {
+    const m = limit(num || 5, 1, 15);
+    return { reply: `Окей, отдыхаем ${minutesWord(m)}. Потом обратно к «${ctx.goal}».`, action: 'break', minutes: m };
+  }
+  const negated = /(^|\s)не\s+(всё\s+)?(законч|сделал|готов)/.test(t);
+  if (!negated && /законч|готово|сделал|(^|\s)всё[.!]*$|бітті/.test(t)) return { reply: 'Отлично! Сейчас покажу твой чек внимания.', action: 'end_session', minutes: 0 };
+  if (/продл|ещё|еще|больше времени/.test(t)) {
+    const m = limit(num || 15, 5, 60);
+    return { reply: `Добавил ${minutesWord(m)}. Держим темп!`, action: 'extend', minutes: m };
+  }
   if (/как я|статист|сколько/.test(t) && ctx.live) {
     const l = ctx.live;
     return { reply: `Фокус ${l.focusScore}%: по делу ${fmtMin(l.totals.focus)}, отвлечения ${fmtMin(l.totals.distraction)}.`, action: 'none', minutes: 0 };
