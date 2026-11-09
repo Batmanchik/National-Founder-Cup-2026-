@@ -1,29 +1,5 @@
-# секреты и локальные настройки
-.env
-.env.*
-!.env.example
-
-# Python
-__pycache__/
-*.py[cod]
-.venv/
-venv/
-.pytest_cache/
-
-# Node
 node_modules/
+.env
 dist/
-build/
-.next/
-npm-debug.log*
-
-# Мобильная разработка
-.dart_tool/
-.gradle/
-Pods/
-
-# IDE и система
-.idea/
-.vscode/
+*.log
 .DS_Store
-Thumbs.db

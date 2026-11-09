@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; script-src 'self'" />
+    <title>Nazar</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <!-- Акыл: пиксельный ментор, живёт внизу экрана -->
+    <div id="buddy" class="interactive" title="Нажми, чтобы поговорить. Тащи, чтобы переставить.">
+      <div id="alert-mark" hidden>!</div>
+      <div id="zzz" hidden>z<span>z</span><span>z</span></div>
+      <canvas id="buddy-canvas"></canvas>
+      <div id="hud" hidden>
+        <span id="hud-timer">25:00</span>
+        <span id="hud-score" class="score">100%</span>
+        <span id="hud-eye" title="Зрение включено" hidden>👁</span>
+      </div>
+    </div>
+
+    <!-- Облачко с репликой -->
+    <div id="bubble" class="interactive" hidden>
+      <div id="bubble-text"></div>
+      <div id="bubble-quick"></div>
+    </div>
+
+    <!-- Старт сессии -->
+    <section id="onboarding" class="panel interactive" hidden>
+      <h1>NAZAR</h1>
+      <p class="sub">Сначала цель, потом лента.</p>
+      <label for="goal">Над чем работаем?</label>
+      <input id="goal" type="text" maxlength="120" placeholder="Например: дописать курсовую по физике" autocomplete="off" />
+      <div class="label">Сколько минут?</div>
+      <div class="chips" id="minutes">
+        <button data-min="15">15</button>
+        <button data-min="25" class="active">25</button>
+        <button data-min="50">50</button>
+        <button data-min="90">90</button>
+      </div>
+      <label class="toggle" id="vision-row">
+        <input type="checkbox" id="vision" />
+        <span>Зрение: раз в ~45 сек ИИ смотрит на скриншот экрана, чтобы точнее понять, работаешь ли ты. Скриншоты нигде не сохраняются.</span>
+      </label>
+      <p class="hint" id="ai-hint"></p>
+      <div class="row">
+        <button id="start" class="primary">Погнали ▶</button>
+        <button id="onb-close" class="ghost">Позже</button>
+      </div>
+    </section>
+
+    <!-- Чат с ментором -->
+    <section id="chat" class="panel interactive" hidden>
+      <header>
+        <strong>Акыл</strong>
+        <span id="chat-mode" class="tag"></span>
+        <button id="voice-toggle" class="icon" title="Озвучка">🔇</button>
+        <button id="chat-close" class="icon" title="Закрыть">✕</button>
+      </header>
+      <div id="chat-log"></div>
+      <div class="chips quick">
+        <button data-say="Дай перерыв 5 минут">☕ Перерыв</button>
+        <button data-say="Как я сейчас?">📊 Как я?</button>
+        <button data-say="Я закончил">✅ Закончил</button>
+      </div>
+      <form id="chat-form">
+        <input id="chat-input" type="text" maxlength="500" placeholder="Напиши Акылу…" autocomplete="off" />
+        <button class="primary" type="submit">➤</button>
+      </form>
+    </section>
+
+    <!-- Чек внимания -->
+    <section id="report" class="panel wide interactive" hidden>
+      <h1>ЧЕК ВНИМАНИЯ</h1>
+      <p class="sub" id="r-goal"></p>
+      <div class="big-score"><span id="r-score">0</span>%<small>фокуса</small></div>
+      <div id="r-timeline" class="timeline" title="Каждый блок — минута сессии"></div>
+      <div class="legend"><i class="focus"></i>по делу <i class="distraction"></i>отвлечение <i class="neutral"></i>нейтрально <i class="break"></i>перерыв</div>
+      <div class="receipt">
+        <div><span>Время сессии</span><b id="r-time"></b></div>
+        <div><span>По делу</span><b id="r-focus"></b></div>
+        <div><span>Утекло в ленту</span><b id="r-dist"></b></div>
+        <div><span>Акыл напоминал</span><b id="r-nudges"></b></div>
+        <div><span>Ты вернулся к цели</span><b id="r-returns"></b></div>
+        <div class="sep"></div>
+        <div><span>Главные «воры» внимания</span><b id="r-thieves"></b></div>
+        <div class="sep"></div>
+        <div><span>Баллы Nazar</span><b id="r-xp"></b></div>
+        <div><span>Уровень Акыла</span><b id="r-level"></b></div>
+      </div>
+      <div class="insight"><b>Акыл:</b> <span id="r-insight">думаю…</span></div>
+      <p class="hint">Скоро: баллы можно будет обменять на скидки у партнёров Nazar.</p>
+      <div class="row">
+        <button id="r-new" class="primary">Новая сессия</button>
+        <button id="r-close" class="ghost">Закрыть</button>
+      </div>
+    </section>
+
+    <script src="../shared/sprites.js"></script>
+    <script src="buddy.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
