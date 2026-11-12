@@ -327,6 +327,13 @@ function handleEvent(ev, w, v) {
       });
     }
   }
+  if (ev === 'break-due') {
+    const m = session.earnedBreak();
+    say(mentor.line('breakDue', { work: mentor.minutesWord(Math.round(session.focusSinceBreak / 60)).replace('минуту', 'минута'), m: mentor.minutesWord(m) }), {
+      mood: 'happy',
+      quick: [`☕ Перерыв ${m} мин`, '💪 Ещё поработаю'],
+    });
+  }
   if (ev === 'back') say(mentor.line('back', vars), { mood: 'happy', action: 'jump' });
   if (ev === 'break-over') say(mentor.line('breakOver', vars), { mood: 'normal', action: 'wake' });
   if (ev === 'time-up') {
@@ -428,10 +435,22 @@ function applyAction(res) {
     if (!res.reply) res.reply = word ? mentor.line(kind === 'focus' ? 'marked' : 'markedDistraction', { keyword: word }) : 'Не понял, какое окно запомнить. Открой его и напиши ещё раз.';
     return;
   }
-  if (!session) return;
+  if (!session) {
+    if (!res.reply) res.reply = 'Сначала начнём сессию — нажми на меня и назови цель!';
+    return;
+  }
   if (res.action === 'break') {
-    const m = session.grantBreak(res.minutes || 5);
-    send('buddy-say', { text: '', mood: 'sleep', action: 'sleep', silent: true, breakMin: m });
+    // Перерыв выдаётся по заработанному фокусу, а не по просьбе (см. session.js); ответ Акыла объясняет почему.
+    const r = session.grantBreak(res.minutes);
+    const vars = { goal: session.goal, work: mentor.minutesWord(r.focusMin).replace('минуту', 'минута'), m: mentor.minutesWord(r.minutes), asked: mentor.minutesWord(r.requested) };
+    if (r.refused) {
+      res.action = 'none';
+      res.reply = mentor.line('breakEarly', { ...vars, need: Math.max(1, r.needMin) });
+      return;
+    }
+    res.minutes = r.minutes;
+    res.reply = mentor.line(r.requested > r.minutes ? 'breakCut' : 'breakOk', vars);
+    send('buddy-say', { text: '', mood: 'sleep', action: 'sleep', silent: true, breakMin: r.minutes });
   } else if (res.action === 'extend') {
     session.extend(res.minutes || 15);
   } else if (res.action === 'end_session') {

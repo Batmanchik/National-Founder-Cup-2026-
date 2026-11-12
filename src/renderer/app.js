@@ -161,6 +161,8 @@
     if (label.includes('Завершить')) api.endSession();
     else if (label.includes('15')) sendChat('Продли на 15 минут');
     else if (label.includes('по работе')) sendChat('Это по работе, запомни');
+    else if (label.includes('Перерыв')) sendChat('Дай перерыв');
+    else if (label.includes('Ещё поработаю')) say('Вот это настрой! Давай-давай, работай-работай!', { mood: 'happy' });
     else if (label.includes('Возвращаюсь')) say('Вот это настрой! Давай-давай, жду 👀', { mood: 'happy' });
   }
 

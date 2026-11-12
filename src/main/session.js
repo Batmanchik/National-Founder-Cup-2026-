@@ -14,6 +14,27 @@ function applyIdle(verdict, idleSec) {
   return { category: 'away', label: 'Нет за компьютером', reason: `нет активности ${Math.round(idleSec / 60)} мин`, soft: false };
 }
 
+// Перерывы по исследованиям, а не «сколько попросишь»:
+//  • систематические перерывы ~1 мин на 4–5 мин работы (12/3, 24/6) дают меньше усталости и лучше концентрацию,
+//    чем перерывы «когда захочется» (Biwer et al., 2023, Br J Educ Psychol);
+//  • короткие перерывы до 10 мин снижают усталость, после тяжёлой работы нужно больше 10 мин (Albulescu et al., 2022, PLOS ONE);
+//  • Flowtime масштабирует отдых по объёму работы: 25 мин → 5, 50 → 8–10, 90+ → 15.
+// Поэтому перерыв зарабатывается фокусом с прошлого перерыва: 1 мин на 5 мин по делу,
+// не больше 10 мин, а после 90 мин непрерывного фокуса — до 20 мин. Время в ленте перерыв не зарабатывает.
+const WORK_PER_BREAK_MIN = 5;
+const MIN_FOCUS_FOR_BREAK = 5; // меньше 5 мин фокуса — перерыв ещё не заработан
+const MAX_SHORT_BREAK = 10;
+const LONG_FOCUS_MIN = 90;
+const MAX_LONG_BREAK = 20;
+const BREAK_DUE_AT_MIN = [50, 90]; // когда Акыл сам предлагает передышку
+
+function earnedBreakMin(focusSec) {
+  const focusMin = focusSec / 60;
+  if (focusMin < MIN_FOCUS_FOR_BREAK) return 0;
+  const cap = focusMin >= LONG_FOCUS_MIN ? MAX_LONG_BREAK : MAX_SHORT_BREAK;
+  return Math.min(cap, Math.max(1, Math.round(focusMin / WORK_PER_BREAK_MIN)));
+}
+
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(v) || lo)));
 
 class Session {
@@ -36,6 +57,8 @@ class Session {
     this.returns = 0;
     this.breaks = 0;
     this.breakUntil = 0;
+    this.focusSinceBreak = 0; // секунд фокуса с прошлого перерыва — из них «зарабатывается» отдых
+    this.breakDueShown = 0; // сколько порогов BREAK_DUE_AT_MIN уже предложено с прошлого перерыва
     this.strict = Boolean(strict); // блокировка выключения: до конца сессии Акыла не выключить
     this.shutdownAttempts = 0; // сколько раз пытались выключить или закрыть
     this.surrendered = false; // сдался досрочно
@@ -114,6 +137,12 @@ class Session {
         events.push('drift-long');
       }
     } else if (cat === 'focus') {
+      this.focusSinceBreak += dt;
+      const due = BREAK_DUE_AT_MIN[this.breakDueShown];
+      if (due && this.focusSinceBreak >= due * 60) {
+        this.breakDueShown += 1;
+        events.push('break-due');
+      }
       if (this.driftNotified) {
         this.returns += 1;
         events.push('back');
@@ -144,11 +173,24 @@ class Session {
     this.longNotified = false;
   }
 
-  grantBreak(minutes, now = Date.now()) {
-    const m = clamp(minutes, 1, 15);
-    this.breakUntil = now + m * 60000;
+  // Сколько минут перерыва заработано сейчас.
+  earnedBreak() {
+    return earnedBreakMin(this.focusSinceBreak);
+  }
+
+  // Просьба о перерыве: выдаём не больше заработанного. Без числа — ровно заработанное.
+  // Возвращает { minutes, requested, earned, focusMin, refused }.
+  grantBreak(requested, now = Date.now()) {
+    const earned = this.earnedBreak();
+    const focusMin = Math.round(this.focusSinceBreak / 60);
+    const want = Math.round(Number(requested)) || 0;
+    if (!earned) return { minutes: 0, requested: want, earned, focusMin, refused: true, needMin: MIN_FOCUS_FOR_BREAK - Math.floor(this.focusSinceBreak / 60) };
+    const minutes = want > 0 ? Math.min(want, earned) : earned;
+    this.breakUntil = now + minutes * 60000;
     this.breaks += 1;
-    return m;
+    this.focusSinceBreak = 0;
+    this.breakDueShown = 0;
+    return { minutes, requested: want, earned, focusMin, refused: false };
   }
 
   extend(minutes) {
@@ -176,6 +218,8 @@ class Session {
       locked: this.isLocked(now),
       lockLeftSec: this.lockLeftSec(now),
       breakLeftSec: Math.max(0, Math.round((this.breakUntil - now) / 1000)),
+      breakEarnedMin: this.earnedBreak(),
+      focusSinceBreakMin: Math.round(this.focusSinceBreak / 60),
       driftStreak: this.driftStreak,
     };
   }
@@ -218,4 +262,4 @@ class Session {
   }
 }
 
-module.exports = { Session, applyIdle, DRIFT_NUDGE_SEC, DRIFT_LONG_SEC, IDLE_SEC };
+module.exports = { Session, applyIdle, earnedBreakMin, DRIFT_NUDGE_SEC, DRIFT_LONG_SEC, IDLE_SEC };
