@@ -4,7 +4,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 
 const { app, BrowserWindow, ipcMain, screen, Tray, Menu, desktopCapturer, globalShortcut, safeStorage, powerMonitor } = require('electron');
 const { ActivityWatcher } = require('./activity');
-const { classify } = require('./classifier');
+const { classify, windowKeyword, isSelf } = require('./classifier');
 const { Session, applyIdle } = require('./session');
 const { Store } = require('./store');
 const { SettingsStore } = require('./settings');
@@ -34,6 +34,7 @@ let visionTimer = null;
 const windowCache = new Map(); // ключ окна -> вердикт ИИ
 const pendingWindow = new Set();
 let chatHistory = [];
+let lastExternal = { app: '', title: '', url: '' }; // последнее окно не Nazar: пока пишешь в чат, активен сам Nazar
 const watcher = new ActivityWatcher();
 
 const mentorOn = () => Boolean(win && !win.isDestroyed());
@@ -212,10 +213,33 @@ function verdictFor(w) {
   return v;
 }
 
+const DRIFT_QUICK = ['↩️ Возвращаюсь', '✅ Это по работе'];
+
+function chatContext() {
+  return {
+    goal: session ? session.goal : 'не задана',
+    live: session ? session.live() : null,
+    window: lastExternal,
+    vision: lastVision,
+    memory: store.memory(),
+  };
+}
+
 function handleEvent(ev, w, v) {
   const vars = { goal: session.goal, label: v.label };
-  if (ev === 'drift') say(mentor.line('drift', vars), { mood: 'worried', action: 'run' });
-  if (ev === 'drift-long') say(lastVision && lastVision.comment ? lastVision.comment : mentor.line('driftLong', vars), { mood: 'worried', action: 'run' });
+  if (ev === 'drift')
+    say(mentor.driftLine({ ...vars, nudges: session.nudges, memory: store.memory() }), { mood: 'worried', action: 'run', quick: DRIFT_QUICK });
+  if (ev === 'drift-long') {
+    if (lastVision && lastVision.comment) say(lastVision.comment, { mood: 'worried', action: 'run', quick: DRIFT_QUICK });
+    else {
+      // ИИ пишет личное напоминание; если он молчит дольше 5 секунд или ключа нет — шаблон.
+      const current = session;
+      mentor.nudge(chatContext()).then((text) => {
+        if (session !== current || !session.longNotified) return; // человек уже вернулся
+        say(text || mentor.line('driftLong', vars), { mood: 'worried', action: 'run', quick: DRIFT_QUICK });
+      });
+    }
+  }
   if (ev === 'back') say(mentor.line('back', vars), { mood: 'happy', action: 'jump' });
   if (ev === 'break-over') say(mentor.line('breakOver', vars), { mood: 'normal', action: 'wake' });
   if (ev === 'time-up') say(mentor.line('timeUp', vars), { mood: 'happy', action: 'jump', quick: ['✅ Завершить', '➕ Ещё 15 минут'] });
@@ -223,6 +247,7 @@ function handleEvent(ev, w, v) {
 
 function tick() {
   const w = watcher.window;
+  if ((w.app || w.title) && !isSelf(w)) lastExternal = w;
   if (!session) return send('activity', { window: w, verdict: null, state: liveState() });
   const v = applyIdle(verdictFor(w), powerMonitor.getSystemIdleTime());
   const events = session.record(v, TICK_MS / 1000);
@@ -251,7 +276,7 @@ function startSession({ goal, minutes, vision }) {
   session = new Session({ goal, minutes, driftSec: settings.data.driftSec });
   chatHistory = [];
   lastVision = null;
-  say(mentor.line('start', { goal: session.goal }), { mood: 'happy', action: 'jump' });
+  say(mentor.startLine(session.goal, store.memory()), { mood: 'happy', action: 'jump' });
   buildTrayMenu();
   notifyPanel();
   return liveState();
@@ -260,17 +285,42 @@ function startSession({ goal, minutes, vision }) {
 function endSession() {
   if (!session) return null;
   const summary = session.summary();
+  const memoryBefore = store.memory(); // сравниваем с прошлым, без текущей сессии
   store.addSession(summary);
   session = null;
   buildTrayMenu();
   notifyPanel();
   const report = { summary, profile: store.profile() };
   send('report', report);
-  mentor.reportInsight(summary).then((text) => send('report-insight', { id: summary.id, text }));
+  mentor.reportInsight(summary, memoryBefore).then((text) => send('report-insight', { id: summary.id, text }));
   return report;
 }
 
+// «Это по работе» / «это отвлечение»: Акыл дописывает окно в нужный список настроек и больше не путает.
+function rememberWindow(kind, keyword) {
+  const word = String(keyword || windowKeyword(lastExternal)).trim().slice(0, 80);
+  if (!word) return '';
+  const key = word.toLowerCase();
+  const without = (list) => list.filter((x) => x.toLowerCase() !== key);
+  const s = settings.data;
+  const patch =
+    kind === 'focus'
+      ? { focusSites: [...without(s.focusSites), word], distractSites: without(s.distractSites) }
+      : { distractSites: [...without(s.distractSites), word], focusSites: without(s.focusSites) };
+  settings.update(patch);
+  applySettings();
+  notifyPanel();
+  return word;
+}
+
 function applyAction(res) {
+  if (res.action === 'mark_focus' || res.action === 'mark_distraction') {
+    const kind = res.action === 'mark_focus' ? 'focus' : 'distraction';
+    const word = rememberWindow(kind, res.keyword);
+    if (kind === 'focus' && session) session.forgiveDrift();
+    if (!res.reply) res.reply = word ? mentor.line(kind === 'focus' ? 'marked' : 'markedDistraction', { keyword: word }) : 'Не понял, какое окно запомнить. Открой его и напиши ещё раз.';
+    return;
+  }
   if (!session) return;
   if (res.action === 'break') {
     const m = session.grantBreak(res.minutes || 5);
@@ -340,10 +390,9 @@ ipcMain.handle('set-vision', (_e, on) => {
   return liveState();
 });
 ipcMain.handle('chat', async (_e, text) => {
-  const ctx = { goal: session ? session.goal : 'не задана', live: session ? session.live() : null, window: watcher.window, vision: lastVision };
-  const res = await mentor.chat(chatHistory, String(text).slice(0, 1000), ctx);
+  const res = await mentor.chat(chatHistory, String(text).slice(0, 1000), chatContext());
+  applyAction(res); // может дописать reply (например, «запомнил»)
   chatHistory.push({ role: 'user', content: String(text) }, { role: 'assistant', content: res.reply });
-  applyAction(res);
   return res;
 });
 

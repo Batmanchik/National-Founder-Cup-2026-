@@ -110,6 +110,14 @@ class Session {
     return events;
   }
 
+  // Пользователь поправил Акыла («это по работе»): текущее отвлечение не считаем срывом.
+  forgiveDrift() {
+    if (this.driftNotified && this.nudges > 0) this.nudges -= 1;
+    this.driftStreak = 0;
+    this.driftNotified = false;
+    this.longNotified = false;
+  }
+
   grantBreak(minutes, now = Date.now()) {
     const m = clamp(minutes, 1, 15);
     this.breakUntil = now + m * 60000;

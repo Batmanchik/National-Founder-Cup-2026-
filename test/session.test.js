@@ -59,3 +59,14 @@ test('бездействие не трогает фокус и видео', () =
   assert.strictEqual(applyIdle({ category: 'distraction', label: 'Сериалы' }, IDLE_SEC * 3).category, 'distraction');
   assert.strictEqual(applyIdle(D, IDLE_SEC - 1).category, 'distraction');
 });
+
+test('поправка «это по работе» снимает напоминание без ложного возврата', () => {
+  const s = new Session({ goal: 'код', minutes: 25, now: 0 });
+  let t = 0;
+  for (let i = 0; i < DRIFT_NUDGE_SEC / 2; i++) s.record(D, 2, (t += 2000));
+  assert.strictEqual(s.nudges, 1);
+  s.forgiveDrift();
+  assert.strictEqual(s.nudges, 0);
+  assert.deepStrictEqual(s.record(F, 2, (t += 2000)), []);
+  assert.strictEqual(s.returns, 0);
+});

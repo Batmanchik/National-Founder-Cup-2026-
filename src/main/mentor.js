@@ -26,18 +26,26 @@ const PERSONA = `Ты — Акыл, маленький пиксельный ме
 Пиши очень коротко: 1–2 предложения, максимум 25 слов. Отвечай на языке пользователя (русский или казахский).
 Никогда не выдумывай, что видел на экране, если этого нет в контексте.`;
 
+const ACTIONS = ['none', 'break', 'end_session', 'extend', 'mark_focus', 'mark_distraction'];
+
 const CHAT_SCHEMA = {
   type: 'object',
   properties: {
     reply: { type: 'string', description: 'Реплика Акыла пользователю' },
     action: {
       type: 'string',
-      enum: ['none', 'break', 'end_session', 'extend'],
-      description: 'break — дать перерыв; end_session — человек закончил; extend — продлить сессию',
+      enum: ACTIONS,
+      description:
+        'break — дать перерыв; end_session — человек закончил; extend — продлить сессию; ' +
+        'mark_focus — человек говорит, что текущее окно нужно для работы; mark_distraction — что это отвлечение',
     },
     minutes: { type: 'integer', description: 'Минуты для break (1–15) или extend (5–60), иначе 0' },
+    keyword: {
+      type: 'string',
+      description: 'Для mark_*: короткое слово или сайт из текущего окна, по которому узнавать его в будущем (например «khanacademy» или «Лекция по физике»). Иначе пустая строка',
+    },
   },
-  required: ['reply', 'action', 'minutes'],
+  required: ['reply', 'action', 'minutes', 'keyword'],
   additionalProperties: false,
 };
 
@@ -130,7 +138,19 @@ function contextText(ctx) {
     lines.push(`Сейчас открыто: ${ctx.window.app} — «${ctx.window.title}»${ctx.window.url ? ` (${ctx.window.url})` : ''}.`);
   }
   if (ctx.vision && ctx.vision.activity) lines.push(`По последнему скриншоту: ${ctx.vision.activity}.`);
+  const mem = memoryText(ctx.memory);
+  if (mem) lines.push(mem);
   return lines.join('\n');
+}
+
+// Память о прошлых сессиях в одну-две строки для Claude.
+function memoryText(m) {
+  if (!m) return '';
+  const parts = [`Прошлые сессии: всего ${m.sessions}, за неделю ${m.weekSessions}, средний фокус ${m.avgFocus}%.`];
+  if (m.topThieves.length) parts.push(`Главные отвлечения за неделю: ${m.topThieves.map((t) => `${t.label} ${fmtMin(t.sec)}`).join(', ')}.`);
+  if (m.bestTime) parts.push(`Лучше всего фокус ${m.bestTime.name === 'день' ? 'днём' : m.bestTime.name === 'утро' ? 'утром' : 'вечером'} (${m.bestTime.avgFocus}%).`);
+  if (m.last) parts.push(`Прошлая сессия: «${m.last.goal}», фокус ${m.last.focusScore}%.`);
+  return parts.join(' ');
 }
 
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
@@ -139,7 +159,13 @@ const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const LINES = {
   greet: ['Привет! Я Акыл, твой пиксельный ментор. Над чем работаем?', 'Салем! Я Акыл. Скажи цель — и я прослежу, чтобы лента её не украла.'],
   start: ['Погнали! Цель: «{goal}». Я рядом.', 'Окей, «{goal}». Телефон подальше, я на страже.'],
-  drift: ['Эй, мы же пришли за «{goal}». Вернёмся?', 'Стоп-стоп, это {label}. А цель была «{goal}».', 'Я всё вижу 👀 {label} подождёт, «{goal}» — нет.'],
+  drift: ['Эй, мы же пришли за «{goal}». Вернёмся?', 'Стоп-стоп, это {label}. А цель была «{goal}».', 'Я всё вижу 👀 Сейчас {label}, а цель — «{goal}».'],
+  driftRepeat: ['Уже {n}-й раз {label} за сессию. Может, закрыть вкладку совсем?', '{label} снова тут, {n}-й раз. Давай уберём его с глаз до конца сессии?'],
+  driftHabit: ['{label} — твой главный вор на этой неделе. Не дадим ему ещё минуту!', 'Снова {label}. За неделю он уже забрал {weekMin}. Вернёмся к «{goal}»?'],
+  startMemory: ['Подсказка: на этой неделе {label} забрал {weekMin}. Убери его подальше 😉', 'За неделю {label} съел {weekMin}. Закрой его заранее.'],
+  startLast: ['В прошлый раз больше всего отвлекал {label}. Закрой его заранее 😉'],
+  marked: ['Понял, запомнил: «{keyword}» — это работа. Больше не дёргаю.', 'Окей, «{keyword}» теперь в списке работы.'],
+  markedDistraction: ['Запомнил: «{keyword}» — отвлечение. Буду следить.', 'Окей, «{keyword}» теперь в списке отвлечений.'],
   driftLong: ['Уже пару минут в «{label}». Может, честный перерыв на 5 минут, а потом обратно?', 'Похоже, лента затянула. Скажи «дай перерыв» — или вернёмся к «{goal}».'],
   back: ['Красава! Снова в деле 💪', 'Вернулся — это главное. +5 XP!', 'Вот это фокус. Продолжаем!'],
   breakOver: ['Перерыв закончился. Возвращаемся к «{goal}»?', 'Подъём! Перерыв всё, «{goal}» ждёт.'],
@@ -151,6 +177,34 @@ function line(kind, vars = {}) {
   return pick(own && own.length ? own : LINES[kind] || ['…']).replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 }
 
+// Реплика при отвлечении с учётом того, сколько раз это уже было и что Акыл помнит о неделе.
+function driftLine({ goal, label, nudges = 1, memory = null }) {
+  if (customLines.drift && customLines.drift.length) return line('drift', { goal, label }); // свои фразы пользователя важнее
+  const thief = memory && memory.topThieves.find((t) => t.label === label);
+  if (thief && thief.sec >= 300 && memory.topThieves[0].label === label && Math.random() < 0.6)
+    return line('driftHabit', { goal, label, weekMin: fmtMin(thief.sec) });
+  if (nudges >= 3) return line('driftRepeat', { goal, label, n: nudges });
+  return line('drift', { goal, label });
+}
+
+// Приветствие при старте: цель плюс совет из прошлых сессий.
+function startLine(goal, memory) {
+  const first = line('start', { goal });
+  if (!memory) return first;
+  const thief = memory.topThieves[0];
+  if (thief && thief.sec >= 120) return `${first} ${line('startMemory', { label: thief.label, weekMin: fmtMin(thief.sec) })}`;
+  if (memory.last && memory.last.topDistractor) return `${first} ${line('startLast', { label: memory.last.topDistractor })}`;
+  return first;
+}
+
+const TIPS = [
+  'Положи телефон в другую комнату, не просто экраном вниз.',
+  'Начни с самого маленького шага: открой файл и напиши одно предложение.',
+  'Закрой все вкладки, которые не нужны для цели. Прямо сейчас.',
+  'Работай 25 минут, потом честный перерыв на 5. Я засеку.',
+  'Сформулируй, что будет готово к концу сессии. Конкретно.',
+];
+
 // Офлайн-чат: понимает базовые просьбы по ключевым словам.
 function offlineChat(text, ctx) {
   const t = text.toLowerCase();
@@ -160,17 +214,36 @@ function offlineChat(text, ctx) {
     const m = limit(num || 5, 1, 15);
     return { reply: `Окей, отдыхаем ${minutesWord(m)}. Потом обратно к «${ctx.goal}».`, action: 'break', minutes: m };
   }
+  // Поправки: «это по работе», «это не отвлечение», «это тоже отвлечение».
+  if (/не\s+отвлеч|по\s+работе|по\s+делу|для\s+(учёбы|учебы|работы|курсов|проекта)|это\s+(лекция|урок|нужно)|жұмыс/.test(t))
+    return { reply: '', action: 'mark_focus', minutes: 0, keyword: '' };
+  if (/(это|тоже|запомни).{0,15}отвлеч/.test(t)) return { reply: '', action: 'mark_distraction', minutes: 0, keyword: '' };
   const negated = /(^|\s)не\s+(всё\s+)?(законч|сделал|готов)/.test(t);
   if (!negated && /законч|готово|сделал|(^|\s)всё[.!]*$|бітті/.test(t)) return { reply: 'Отлично! Сейчас покажу твой чек внимания.', action: 'end_session', minutes: 0 };
   if (/продл|ещё|еще|больше времени/.test(t)) {
     const m = limit(num || 15, 5, 60);
     return { reply: `Добавил ${minutesWord(m)}. Держим темп!`, action: 'extend', minutes: m };
   }
+  if (/осталось|сколько времени|таймер/.test(t) && ctx.live) {
+    return { reply: `Осталось ${fmtMin(ctx.live.remainingSec)}. Фокус пока ${ctx.live.focusScore}%.`, action: 'none', minutes: 0 };
+  }
   if (/как я|статист|сколько/.test(t) && ctx.live) {
     const l = ctx.live;
-    return { reply: `Фокус ${l.focusScore}%: по делу ${fmtMin(l.totals.focus)}, отвлечения ${fmtMin(l.totals.distraction)}.`, action: 'none', minutes: 0 };
+    const m = ctx.memory;
+    const cmp = m && m.sessions >= 2 ? (l.focusScore >= m.avgFocus ? ` Это выше твоего среднего (${m.avgFocus}%) 🔥` : ` Твой средний ${m.avgFocus}%, догоняем.`) : '';
+    return { reply: `Фокус ${l.focusScore}%: по делу ${fmtMin(l.totals.focus)}, отвлечения ${fmtMin(l.totals.distraction)}.${cmp}`, action: 'none', minutes: 0 };
   }
-  return { reply: `Я офлайн-версия, но слежу за целью «${ctx.goal}». Добавь ключ Claude — стану умнее.`, action: 'none', minutes: 0 };
+  if (/совет|помоги|не могу|лень|скучно|не получается|мотивац/.test(t)) {
+    const m = ctx.memory;
+    if (m && m.topThieves[0] && Math.random() < 0.5)
+      return { reply: `Главный вор этой недели — ${m.topThieves[0].label}. Закрой его и возвращайся к «${ctx.goal}».`, action: 'none', minutes: 0 };
+    return { reply: pick(TIPS), action: 'none', minutes: 0 };
+  }
+  if (/что умеешь|помощь|help|команды/.test(t)) {
+    return { reply: 'Могу: «дай перерыв 5 минут», «продли на 15», «как я?», «сколько осталось», «это по работе», «я закончил».', action: 'none', minutes: 0 };
+  }
+  if (/привет|салем|сәлем|hi\b|hello/.test(t)) return { reply: `Салем! Держим курс на «${ctx.goal}».`, action: 'none', minutes: 0 };
+  return { reply: `Я офлайн-версия, но слежу за целью «${ctx.goal}». Напиши «что умеешь» или добавь ключ Claude — стану умнее.`, action: 'none', minutes: 0 };
 }
 
 async function chat(history, text, ctx) {
@@ -179,11 +252,33 @@ async function chat(history, text, ctx) {
     { role: 'user', content: `[Контекст]\n${contextText(ctx)}\n\n[Сообщение пользователя]\n${text}` },
   ];
   const system = `${PERSONA}
-Ты можешь выполнить действие: дать перерыв (action=break, 1–15 минут, если человек устал или просит), завершить сессию (end_session, если человек говорит, что закончил), продлить сессию (extend, 5–60 минут). В остальных случаях action=none и minutes=0.
-Если человек просит отвлечься без причины — можно договориться о коротком перерыве, но напомни про цель.`;
+Ты можешь выполнить действие: дать перерыв (action=break, 1–15 минут, если человек устал или просит), завершить сессию (end_session, если человек говорит, что закончил), продлить сессию (extend, 5–60 минут).
+Если человек говорит, что текущее окно нужно для работы («это по учёбе», «не ругайся, это лекция»), поставь action=mark_focus и keyword. Если просит считать окно отвлечением — mark_distraction. keyword бери из текущего окна: сайт или 1–4 слова заголовка, которые узнают именно этот материал, а не весь YouTube.
+В остальных случаях action=none, minutes=0, keyword пустой.
+Если человек просит отвлечься без причины — можно договориться о коротком перерыве, но напомни про цель.
+Используй память о прошлых сессиях, когда это к месту: сравни с его средним, назови его главного «вора», но не повторяйся каждый раз.`;
   const res = await callClaude({ system, messages, schema: CHAT_SCHEMA });
-  if (res && typeof res.reply === 'string') return { ...res, ai: true };
+  if (res && typeof res.reply === 'string' && ACTIONS.includes(res.action)) return { ...res, ai: true };
   return { ...offlineChat(text, ctx), ai: false };
+}
+
+// Обещание с таймаутом: если ИИ думает дольше ms, возвращаем null и берём шаблон.
+function withTimeout(promise, ms) {
+  return Promise.race([promise, new Promise((resolve) => setTimeout(() => resolve(null), ms))]);
+}
+
+// Личное напоминание от ИИ для затянувшегося отвлечения: учитывает цель, окно, статистику и память.
+async function nudge(ctx) {
+  if (!client) return null;
+  const text = await withTimeout(
+    callClaude({
+      system: `${PERSONA}\nЧеловек уже пару минут отвлекается. Напиши одно короткое личное напоминание (до 20 слов): назови, что именно он смотрит, и мягко верни к цели. Можно предложить честный перерыв. Без кавычек.`,
+      messages: [{ role: 'user', content: contextText(ctx) }],
+      maxTokens: 400,
+    }),
+    5000
+  );
+  return text ? text.replace(/^["«]|["»]$/g, '').trim() : null;
 }
 
 // ИИ решает, связано ли «непонятное» окно (YouTube, мессенджер, сайт) с целью.
@@ -220,7 +315,7 @@ async function analyzeScreen(goal, win, jpegBase64) {
 }
 
 // Персональный вывод по итогам сессии.
-async function reportInsight(summary) {
+async function reportInsight(summary, memory = null) {
   const top = summary.topDistractors.map((d) => `${d.label} (${fmtMin(d.sec)})`).join(', ') || 'нет';
   const text = await callClaude({
     system: `${PERSONA}\nСейчас ты подводишь итог фокус-сессии. 2–3 коротких предложения: что получилось, где утекло внимание, один конкретный совет на следующий раз.`,
@@ -229,19 +324,44 @@ async function reportInsight(summary) {
         role: 'user',
         content: `Цель: «${summary.goal}». Длительность ${summary.elapsedMin} мин (план ${summary.plannedMin}). Фокус ${summary.focusScore}%.
 По делу ${fmtMin(summary.totals.focus)}, отвлечения ${fmtMin(summary.totals.distraction)}, нейтрально ${fmtMin(summary.totals.neutral)}, перерывы ${fmtMin(summary.totals.break)}, не за компьютером ${fmtMin(summary.totals.away || 0)}.
-Главные отвлечения: ${top}. Напоминаний: ${summary.nudges}, возвратов к цели: ${summary.returns}.`,
+Главные отвлечения: ${top}. Напоминаний: ${summary.nudges}, возвратов к цели: ${summary.returns}.
+${memoryText(memory) || 'Это первая сессия.'}
+Если есть прошлые сессии, сравни с ними (лучше или хуже среднего), а совет опирай на повторяющийся паттерн.`,
       },
     ],
     maxTokens: 1500,
   });
   if (text) return text;
-  if (summary.focusScore >= 80) return `Мощно: ${summary.focusScore}% фокуса. Повтори такой же формат завтра — привычка закрепится.`;
+  return offlineInsight(summary, memory);
+}
+
+// Вывод без ИИ: сравнение со средним, повторяющийся «вор», лучшее время дня.
+function offlineInsight(summary, memory) {
+  const parts = [];
+  const avg = memory && memory.sessions >= 2 ? memory.avgFocus : null;
+  if (avg !== null && summary.focusScore >= avg + 5) parts.push(`${summary.focusScore}% фокуса — выше твоего среднего (${avg}%). Растёшь!`);
+  else if (avg !== null && summary.focusScore <= avg - 5) parts.push(`${summary.focusScore}% фокуса, обычно у тебя ${avg}%. Бывает, завтра отыграемся.`);
+  else if (summary.focusScore >= 80) parts.push(`Мощно: ${summary.focusScore}% фокуса.`);
+  else parts.push(`Фокус ${summary.focusScore}%.`);
   const worst = summary.topDistractors[0];
-  return `Фокус ${summary.focusScore}%. ${worst ? `Больше всего внимания забрал «${worst.label}». В следующий раз закрой его до старта.` : 'Попробуй сессию покороче — 25 минут.'}`;
+  const habitual = worst && memory && memory.topThieves.some((t) => t.label === worst.label);
+  if (worst && habitual) parts.push(`${worst.label} отвлекает тебя уже не первый раз. Закрой его до старта или добавь в список отвлечений.`);
+  else if (worst) parts.push(`Больше всего внимания забрал «${worst.label}». В следующий раз закрой его заранее.`);
+  else parts.push('Повтори такой же формат завтра, привычка закрепится.');
+  if (memory && memory.bestTime && summary.focusScore < memory.bestTime.avgFocus - 10) {
+    const when = { утро: 'утром', день: 'днём', вечер: 'вечером' }[memory.bestTime.name];
+    parts.push(`Кстати, лучше всего ты фокусируешься ${when}, попробуй сложное ставить туда.`);
+  }
+  return parts.join(' ');
 }
 
 module.exports = {
   chat,
+  nudge,
+  driftLine,
+  startLine,
+  offlineChat,
+  offlineInsight,
   classifyWindow,
   analyzeScreen,
   reportInsight,

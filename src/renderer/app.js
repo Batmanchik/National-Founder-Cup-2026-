@@ -122,6 +122,8 @@
     bubble.hidden = true;
     if (label.includes('Завершить')) api.endSession();
     else if (label.includes('15')) sendChat('Продли на 15 минут');
+    else if (label.includes('по работе')) sendChat('Это по работе, запомни');
+    else if (label.includes('Возвращаюсь')) say('Жду! Я рядом 👀', { mood: 'happy' });
   }
 
   // ---------- Реакции на события ----------

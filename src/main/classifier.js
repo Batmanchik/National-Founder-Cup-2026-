@@ -90,4 +90,27 @@ function classify(win, goal, custom = {}) {
   return { category: 'neutral', label: app || 'Другое', reason: 'нет правила', soft: true };
 }
 
-module.exports = { classify, goalStems };
+const BROWSER_SUFFIX = /\s[-—–|]\s(google chrome|mozilla firefox|microsoft edge|yandex|яндекс браузер|opera|brave|vivaldi|safari)$/i;
+
+// Короткий признак окна, который Акыл запоминает после поправки «это по работе».
+// Сначала название страницы без сайта и браузера (чтобы запомнить одну лекцию, а не весь YouTube),
+// если заголовка нет — домен, иначе приложение.
+function windowKeyword(win) {
+  if (!win) return '';
+  const title = String(win.title || '').replace(BROWSER_SUFFIX, '').trim();
+  const parts = title.split(/\s[-—–|•]\s/).map((p) => p.trim()).filter(Boolean);
+  const page = parts.length > 1 ? parts[0] : title;
+  if (page && page.length >= 3) return page.slice(0, 60);
+  if (win.url) {
+    try {
+      return new URL(win.url).hostname.replace(/^www\./, '');
+    } catch {
+      /* не URL — идём дальше */
+    }
+  }
+  return String(win.app || '').slice(0, 60);
+}
+
+const isSelf = (win) => Boolean(win && SELF.test(win.app || ''));
+
+module.exports = { classify, goalStems, windowKeyword, isSelf };
