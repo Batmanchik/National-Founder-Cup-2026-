@@ -15,9 +15,12 @@
   let savedTimer = null;
 
   function drawAkyl(on) {
-    const ctx = $('akyl').getContext('2d');
+    const cv = $('akyl');
+    cv.width = S.WIDTH;
+    cv.height = S.HEIGHT;
+    const ctx = cv.getContext('2d');
     ctx.clearRect(0, 0, S.WIDTH, S.HEIGHT);
-    S.frame(on ? { mouth: 'smile', arms: 'up' } : { eyes: 'blink' }).forEach((row, y) => {
+    S.frame(on ? { mouth: 'smile', eyes: 'happy', arms: 'wave' } : { eyes: 'blink' }).forEach((row, y) => {
       [...row].forEach((ch, x) => {
         const color = S.PALETTE[ch];
         if (!color) return;

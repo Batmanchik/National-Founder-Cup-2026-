@@ -100,7 +100,7 @@
 | Часть | Технология |
 |---|---|
 | Десктоп-приложение | Electron 44 (встроенные Node.js 24 и Chromium 152) |
-| Интерфейс | HTML, CSS и JavaScript без фреймворков, пиксель-арт на Canvas из текстовых матриц |
+| Интерфейс | HTML, CSS и JavaScript без фреймворков, пиксель-арт 24×30 на Canvas: кадр собирается из слоёв, контур строится автоматически |
 | ИИ | Claude API (`@anthropic-ai/sdk`), по умолчанию модель `claude-opus-5-5`: structured outputs и vision |
 | Трекинг окна | PowerShell + WinAPI (Windows), AppleScript (macOS), xdotool (Linux), без нативных модулей |
 | Хранение | Локальный JSON `nazar-data.json` в папке данных приложения, базы данных нет |

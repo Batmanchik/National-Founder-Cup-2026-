@@ -9,10 +9,11 @@ function hexToRgb(hex) {
 
 function makeTrayIcon() {
   const size = 32; // 16pt при scaleFactor 2
-  const scale = 2;
+  const rows = S.frame({ mouth: 'smile', eyes: 'happy' }).slice(0, S.HEAD_ROWS); // только голова
+  const scale = Math.max(1, Math.floor(size / Math.max(S.WIDTH, rows.length)));
   const buf = Buffer.alloc(size * size * 4); // BGRA
-  const rows = S.frame({ mouth: 'smile' }).slice(0, 10); // только голова
   const offY = Math.floor((size - rows.length * scale) / 2);
+  const offX = Math.floor((size - S.WIDTH * scale) / 2);
   rows.forEach((row, y) => {
     [...row].forEach((ch, x) => {
       const color = S.PALETTE[ch];
@@ -20,7 +21,7 @@ function makeTrayIcon() {
       const [r, g, b] = hexToRgb(color);
       for (let dy = 0; dy < scale; dy++)
         for (let dx = 0; dx < scale; dx++) {
-          const i = ((offY + y * scale + dy) * size + (x * scale + dx)) * 4;
+          const i = ((offY + y * scale + dy) * size + (offX + x * scale + dx)) * 4;
           buf[i] = b;
           buf[i + 1] = g;
           buf[i + 2] = r;

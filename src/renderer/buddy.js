@@ -10,7 +10,7 @@
 (function () {
   'use strict';
   const S = NazarSprites;
-  const SIZES = { small: 3, medium: 4, large: 5 };
+  const SIZES = { small: 2, medium: 3, large: 4 }; // спрайт 24×30: 48×60, 72×90, 96×120 px
   const GROUND_GAP = 18; // место под HUD
 
   const cache = new Map();
@@ -295,7 +295,7 @@
       ctx.drawImage(renderFrame(this._frameOpts(now)), 0, 0, this.w, this.h);
       ctx.restore();
       // Прыжок — синусоида; при сне — лёгкое «дыхание».
-      const hopPx = this.scale * 5.6;
+      const hopPx = this.h * 0.3;
       const hop = this.jumpT > 0 ? Math.sin((this.jumpT / 0.45) * Math.PI) * hopPx : 0;
       const breathe = this.mode === 'sleep' ? Math.round(Math.sin(this.t * 2) * 1.5) : 0;
       this.el.style.transform = `translate(${Math.round(this.x)}px, ${Math.round(this.y - hop + breathe)}px)`;

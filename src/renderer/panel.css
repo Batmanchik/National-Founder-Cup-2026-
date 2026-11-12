@@ -30,7 +30,7 @@ body {
   background: var(--ink);
   color: var(--paper);
 }
-#akyl { width: 64px; height: 76px; image-rendering: pixelated; flex: none; }
+#akyl { width: 48px; height: 60px; image-rendering: pixelated; flex: none; }
 .who { flex: 1; min-width: 0; }
 h1 { margin: 0 0 8px; font: 20px 'PressStart', monospace; letter-spacing: 1px; }
 #status { margin: 0; font-size: 14px; color: #d9dbe8; overflow-wrap: anywhere; }
