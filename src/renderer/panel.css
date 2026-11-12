@@ -78,6 +78,12 @@ button:active { transform: translate(2px, 2px); }
 .big { padding: 12px 18px; font-size: 16px; box-shadow: 4px 4px 0 #000; border-color: #000; flex: none; }
 .big.on { background: var(--teal); }
 .big.off { background: var(--red); color: #fff; }
+.big.locked { background: #ffd166; color: #1a1c2c; }
+.lock { margin: 16px 20px 0; padding: 12px 14px; border: 3px solid #1a1c2c; background: #fff3d6; }
+.lock h2 { margin: 0 0 6px; }
+.lock p { margin: 0 0 10px; }
+.lock .row { display: flex; gap: 8px; }
+.lock input { flex: 1; }
 
 footer {
   display: flex;

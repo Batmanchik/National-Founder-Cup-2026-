@@ -70,3 +70,36 @@ test('поправка «это по работе» снимает напоми�
   assert.deepStrictEqual(s.record(F, 2, (t += 2000)), []);
   assert.strictEqual(s.returns, 0);
 });
+
+test('блокировка: держится до конца времени, снимается сдачей', () => {
+  const s = new Session({ goal: 'код', minutes: 45, strict: true, now: 0 });
+  assert.strictEqual(s.isLocked(10 * 60000), true);
+  assert.strictEqual(s.lockLeftSec(15 * 60000), 30 * 60);
+  assert.strictEqual(s.isLocked(45 * 60000), false, 'время вышло');
+  s.surrendered = true;
+  assert.strictEqual(s.isLocked(10 * 60000), false);
+  assert.strictEqual(new Session({ goal: 'код', minutes: 45, now: 0 }).isLocked(60000), false, 'без блокировки');
+});
+
+test('сдался досрочно: половина опыта, отметка в чеке', () => {
+  const s = new Session({ goal: 'код', minutes: 45, strict: true, now: 0 });
+  s.record(F, 20 * 60, 20 * 60000);
+  s.shutdownAttempts = 2;
+  s.surrendered = true;
+  const sum = s.summary(20 * 60000);
+  assert.strictEqual(sum.xpEarned, 10);
+  assert.strictEqual(sum.shutdownAttempts, 2);
+  assert.strictEqual(sum.surrendered, true);
+});
+
+test('снимок сессии восстанавливается после убийства процесса', () => {
+  const s = new Session({ goal: 'код', minutes: 45, strict: true, now: 0 });
+  s.record(F, 120, 120000);
+  s.shutdownAttempts = 1;
+  const r = Session.restore(JSON.parse(JSON.stringify(s.snapshot())));
+  assert.strictEqual(r.goal, 'код');
+  assert.strictEqual(r.totals.focus, 120);
+  assert.strictEqual(r.isLocked(10 * 60000), true);
+  assert.strictEqual(r.shutdownAttempts, 1);
+  assert.strictEqual(typeof r.record, 'function');
+});

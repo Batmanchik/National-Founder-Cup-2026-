@@ -152,6 +152,7 @@
     'Балапан, работать пора! Закрывай это!',
   ];
   let scoldTimer = null;
+  let blockedTimer = null;
   let scoldCount = 0;
   let scoldLabel = 'ленту';
   let lastScold = '';
@@ -191,6 +192,21 @@
       buddy.runTo(window.innerWidth / 2 - buddy.width / 2);
       startScolding();
     }
+    // Попытка выключить во время блокировки: выбегает в центр, злится и трясёт кулаками ~7 секунд.
+    if (action === 'blocked') {
+      buddy.wake();
+      $('zzz').hidden = true;
+      buddy.runTo(window.innerWidth / 2 - buddy.width / 2);
+      $('alert-mark').hidden = false;
+      buddy.setAngry(true);
+      clearTimeout(blockedTimer);
+      blockedTimer = setTimeout(() => {
+        if (scoldTimer) return; // человек ещё и в ленте — злость продолжается
+        $('alert-mark').hidden = true;
+        buddy.setAngry(false);
+        buddy.goHome();
+      }, 7000);
+    }
     if (action === 'jump') buddy.jump();
     if (action === 'sleep') {
       stopScolding();
@@ -207,6 +223,12 @@
   api.on('buddy-say', react);
 
   const fmt = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
+  // «1 раз», «2 раза», «5 раз»
+  const times = (n) => {
+    const d = n % 10;
+    const dd = n % 100;
+    return `${n} ${d >= 2 && d <= 4 && (dd < 12 || dd > 14) ? 'раза' : 'раз'}`;
+  };
   const fmtMin = (sec) => (sec < 60 ? `${Math.round(sec)} сек` : `${Math.round(sec / 60)} мин`);
 
   function renderHud(s) {
@@ -222,6 +244,7 @@
     sc.textContent = `${l.focusScore}%`;
     sc.className = `score ${l.focusScore < 50 ? 'low' : l.focusScore < 80 ? 'mid' : ''}`;
     $('hud-eye').hidden = !s.vision;
+    $('hud-lock').hidden = !l.locked;
     if (!l.onBreak && !$('zzz').hidden) {
       $('zzz').hidden = true;
       buddy.wake();
@@ -291,6 +314,7 @@
     p.style.top = `${Math.max(16, buddy.ground() - p.offsetHeight - 30)}px`;
     $('vision').disabled = !(state && state.ai);
     $('vision').checked = Boolean(state && state.vision);
+    $('strict').checked = Boolean(state && state.strictDefault);
     $('ai-hint').textContent = state && state.ai
       ? `ИИ: ${state.model}`
       : 'Офлайн-режим: добавь ANTHROPIC_API_KEY в .env, чтобы включить ИИ-чат и зрение.';
@@ -311,7 +335,8 @@
       return;
     }
     panels.onboarding.hidden = true;
-    state = await api.startSession({ goal, minutes, vision: $('vision').checked });
+    state = await api.startSession({ goal, minutes, vision: $('vision').checked, strict: $('strict').checked });
+    if (state.session && state.session.locked) say(`🔒 Блокировка включена: до конца сессии меня не выключить. Сдаться можно только словами «я сдаюсь».`, { ms: 6000 });
     $('chat-log').innerHTML = '';
     renderHud(state);
   }
@@ -401,11 +426,14 @@
     $('r-time').textContent = `${s.elapsedMin} из ${s.plannedMin} мин`;
     $('r-focus').textContent = fmtMin(s.totals.focus);
     $('r-dist').textContent = fmtMin(s.totals.distraction);
+    $('r-attempts-row').hidden = !s.shutdownAttempts;
+    $('r-attempts').textContent = `${times(s.shutdownAttempts)} 😤`;
+    $('r-surrender-row').hidden = !s.surrendered;
     const away = s.totals.away || 0;
     $('r-away-row').hidden = away < 60;
     $('r-away').textContent = fmtMin(away);
-    $('r-nudges').textContent = `${s.nudges} раз`;
-    $('r-returns').textContent = `${s.returns} раз`;
+    $('r-nudges').textContent = times(s.nudges);
+    $('r-returns').textContent = times(s.returns);
     $('r-thieves').textContent = s.topDistractors.length ? s.topDistractors.map((d) => `${d.label} ${fmtMin(d.sec)}`).join(', ') : 'не нашлось 💪';
     $('r-xp').textContent = `+${s.xpEarned} (всего ${p.xp})`;
     $('r-level').textContent = `${p.level} · серия ${p.streak} дн.`;

@@ -17,6 +17,7 @@
         <span id="hud-timer">25:00</span>
         <span id="hud-score" class="score">100%</span>
         <span id="hud-eye" title="Зрение включено" hidden>👁</span>
+        <span id="hud-lock" title="Блокировка: до конца сессии Акыла не выключить" hidden>🔒</span>
       </div>
     </div>
 
@@ -42,6 +43,10 @@
       <label class="toggle" id="vision-row">
         <input type="checkbox" id="vision" />
         <span>Зрение: раз в ~45 сек ИИ смотрит на скриншот экрана, чтобы точнее понять, работаешь ли ты. Скриншоты нигде не сохраняются.</span>
+      </label>
+      <label class="toggle">
+        <input type="checkbox" id="strict" />
+        <span>🔒 Блокировка выключения: до конца таймера Акыла не выключить и не закрыть. Выход только один — честно сдаться.</span>
       </label>
       <p class="hint" id="ai-hint"></p>
       <div class="row">
@@ -82,6 +87,8 @@
         <div><span>Время сессии</span><b id="r-time"></b></div>
         <div><span>По делу</span><b id="r-focus"></b></div>
         <div><span>Утекло в ленту</span><b id="r-dist"></b></div>
+        <div id="r-attempts-row" hidden><span>Пытался выключить Акыла</span><b id="r-attempts"></b></div>
+        <div id="r-surrender-row" hidden><span>Финиш</span><b>сдался досрочно 🏳</b></div>
         <div id="r-away-row" hidden><span>Не за компьютером</span><b id="r-away"></b></div>
         <div><span>Акыл напоминал</span><b id="r-nudges"></b></div>
         <div><span>Ты вернулся к цели</span><b id="r-returns"></b></div>

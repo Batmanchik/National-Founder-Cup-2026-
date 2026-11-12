@@ -16,11 +16,23 @@
       <button id="toggle" class="big" type="button"></button>
     </header>
 
+    <section id="lock-box" class="lock" hidden>
+      <h2>🔒 Сессия заблокирована</h2>
+      <p id="lock-text"></p>
+      <div class="row">
+        <input id="surrender-phrase" type="text" placeholder="впиши: я сдаюсь" autocomplete="off" />
+        <button id="surrender" type="button" class="ghost">Сдаться досрочно</button>
+      </div>
+      <small id="lock-err" class="note"></small>
+    </section>
+
     <form id="form" autocomplete="off">
       <section>
         <h2>Запуск</h2>
         <label class="check"><input type="checkbox" id="startMentorOnOpen" /> Включать Акыла при открытии Nazar</label>
         <label class="check"><input type="checkbox" id="autoStart" /> Запускать Nazar при входе в Windows</label>
+        <label class="check"><input type="checkbox" id="strictMode" /> 🔒 Блокировка выключения в новых сессиях</label>
+        <small class="note">Пока идёт таймер, Акыла нельзя выключить, закрыть или завершить сессию раньше времени, а за попытки он ругается. Если Nazar убить через диспетчер задач, при следующем запуске сессия продолжится. Выход один: честно сдаться.</small>
       </section>
 
       <section>

@@ -17,7 +17,7 @@ function applyIdle(verdict, idleSec) {
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(v) || lo)));
 
 class Session {
-  constructor({ goal, minutes, driftSec, now = Date.now() }) {
+  constructor({ goal, minutes, driftSec, strict = false, now = Date.now() }) {
     this.id = String(now);
     this.setDriftSec(driftSec);
     this.goal = String(goal || '').trim() || 'Без цели';
@@ -36,6 +36,32 @@ class Session {
     this.returns = 0;
     this.breaks = 0;
     this.breakUntil = 0;
+    this.strict = Boolean(strict); // блокировка выключения: до конца сессии Акыла не выключить
+    this.shutdownAttempts = 0; // сколько раз пытались выключить или закрыть
+    this.surrendered = false; // сдался досрочно
+  }
+
+  // Восстановить сессию из снимка (после того как Nazar убили через диспетчер задач).
+  static restore(data) {
+    const s = new Session({ goal: data.goal, minutes: data.plannedMin, driftSec: data.driftNudgeSec, now: data.startedAt });
+    return Object.assign(s, data);
+  }
+
+  snapshot() {
+    return JSON.parse(JSON.stringify(this));
+  }
+
+  isTimeUp(now = Date.now()) {
+    return now - this.startedAt >= this.plannedMin * 60000;
+  }
+
+  // Сессия заблокирована: включена блокировка и время ещё не вышло.
+  isLocked(now = Date.now()) {
+    return this.strict && !this.surrendered && !this.isTimeUp(now);
+  }
+
+  lockLeftSec(now = Date.now()) {
+    return Math.max(0, Math.round((this.startedAt + this.plannedMin * 60000 - now) / 1000));
   }
 
   setDriftSec(sec) {
@@ -147,6 +173,8 @@ class Session {
       focusScore: this.focusScore(),
       totals: { ...this.totals },
       onBreak: this.isOnBreak(now),
+      locked: this.isLocked(now),
+      lockLeftSec: this.lockLeftSec(now),
       breakLeftSec: Math.max(0, Math.round((this.breakUntil - now) / 1000)),
       driftStreak: this.driftStreak,
     };
@@ -160,8 +188,9 @@ class Session {
         .map(([label, sec]) => ({ label, sec }));
     const score = this.focusScore();
     const elapsedMin = (now - this.startedAt) / 60000;
-    const xpEarned =
+    let xpEarned =
       Math.round(this.totals.focus / 60) + this.returns * 5 + (score >= 80 && elapsedMin >= 10 ? 20 : 0);
+    if (this.surrendered) xpEarned = Math.floor(Math.round(this.totals.focus / 60) / 2); // сдался: половина за минуты, без бонусов
     return {
       id: this.id,
       goal: this.goal,
@@ -174,6 +203,9 @@ class Session {
       nudges: this.nudges,
       returns: this.returns,
       breaks: this.breaks,
+      strict: this.strict,
+      shutdownAttempts: this.shutdownAttempts,
+      surrendered: this.surrendered,
       topDistractors: top(this.distractors),
       topApps: top(this.apps),
       timeline: this.timeline.map((b) => {

@@ -7,7 +7,7 @@
   const S = NazarSprites;
 
   const NUMBERS = ['driftSec', 'visionIntervalSec'];
-  const CHECKS = ['startMentorOnOpen', 'autoStart', 'vision'];
+  const CHECKS = ['startMentorOnOpen', 'autoStart', 'vision', 'strictMode'];
   const LISTS = ['focusSites', 'distractSites', 'driftLines', 'backLines'];
 
   let dirty = false;
@@ -35,8 +35,17 @@
         ? `Акыл работает. Цель: «${st.goal}»`
         : 'Акыл работает. Нажми на него внизу экрана, чтобы начать сессию';
     const btn = $('toggle');
-    btn.textContent = st.mentorOn ? 'Выключить Акыла' : 'Включить Акыла';
-    btn.className = `big ${st.mentorOn ? 'off' : 'on'}`;
+    const left = Math.ceil(st.lockLeftSec / 60);
+    btn.textContent = st.locked ? `🔒 ещё ${left} мин` : st.mentorOn ? 'Выключить Акыла' : 'Включить Акыла';
+    btn.className = `big ${st.locked ? 'locked' : st.mentorOn ? 'off' : 'on'}`;
+    btn.title = st.locked ? 'Блокировка: Акыл не выключится до конца сессии' : '';
+    $('lock-box').hidden = !st.locked;
+    if (st.locked) {
+      $('status').textContent = `🔒 Сессия «${st.goal}» заблокирована ещё на ${left} мин.`;
+      $('lock-text').textContent =
+        `Акыла не выключить до конца таймера.${st.attempts ? ` Попыток выключить: ${st.attempts}.` : ''} ` +
+        'Если правда надо уйти — сдайся. В чеке будет отметка, опыта — половина.';
+    }
     $('clear-key').hidden = !st.settings.hasKey || clearKey;
     $('apiKey').placeholder = st.settings.hasKey ? 'Ключ сохранён. Впиши новый, чтобы заменить' : 'sk-ant-…';
     $('apiKey').disabled = !st.canEncrypt;
@@ -96,6 +105,15 @@
     renderStatus(await api.toggle());
     $('toggle').disabled = false;
   });
+  $('surrender').addEventListener('click', async () => {
+    const res = await api.surrender($('surrender-phrase').value);
+    $('lock-err').textContent = res.ok ? '' : res.error;
+    if (res.ok) $('surrender-phrase').value = '';
+    renderStatus(res.state);
+  });
+  // Пока сессия заблокирована, обратный отсчёт на кнопке обновляется сам.
+  setInterval(() => api.get().then(renderStatus), 15000);
+
   $('clear-key').addEventListener('click', () => {
     clearKey = true;
     dirty = true;

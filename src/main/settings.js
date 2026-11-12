@@ -15,6 +15,7 @@ const DEFAULTS = {
   visionIntervalSec: 45,
   startMentorOnOpen: true,
   autoStart: false,
+  strictMode: false,
   distractSites: [],
   focusSites: [],
   driftLines: [],
@@ -59,6 +60,7 @@ function normalize(input = {}, base = DEFAULTS) {
     visionIntervalSec: clampInt(s.visionIntervalSec, 15, 600, base.visionIntervalSec),
     startMentorOnOpen: Boolean(s.startMentorOnOpen),
     autoStart: Boolean(s.autoStart),
+    strictMode: Boolean(s.strictMode),
   };
   for (const [key, limits] of Object.entries(LIST_LIMITS)) out[key] = cleanList(s[key], limits);
   return out;

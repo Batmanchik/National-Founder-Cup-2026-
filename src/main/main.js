@@ -10,6 +10,8 @@ const { Store } = require('./store');
 const { SettingsStore } = require('./settings');
 const mentor = require('./mentor');
 const { makeTrayIcon } = require('./icon');
+const { writeJsonAtomic, readJsonSafe } = require('../shared/fsutil');
+const fs = require('fs');
 
 const TICK_MS = 2000;
 const HIDDEN_START = process.argv.includes('--hidden'); // автозапуск при входе в Windows: без окна управления
@@ -27,6 +29,10 @@ let store = null;
 let settings = null;
 let session = null;
 let quitting = false;
+let systemQuitting = false; // выключение или перезагрузка Windows: блокировка не мешает
+let activeFile = null; // снимок заблокированной сессии на случай, если Nazar убьют
+let lastPersist = 0;
+let restoredKind = null; // 'killed' — Nazar убили; 'reboot' — выключался компьютер
 let visionEnabled = false;
 let lastVision = null; // { on_task, activity, confidence, comment, at, key }
 let tickTimer = null;
@@ -41,6 +47,54 @@ const mentorOn = () => Boolean(win && !win.isDestroyed());
 const send = (channel, data) => mentorOn() && win.webContents.send(channel, data);
 const winKey = (w) => `${w.app}|${w.title}|${w.url}`;
 const say = (text, opts = {}) => send('buddy-say', { text, ...opts });
+
+// ---------- Блокировка выключения ----------
+// Пока идёт сессия с блокировкой, Акыла нельзя выключить, закрыть или завершить сессию раньше времени.
+// Выход один — честно сдаться (фраза «я сдаюсь»), тогда в чеке будет отметка.
+// Выключение компьютера блокировка не держит: сессия сохранится и продолжится после включения.
+const locked = () => Boolean(session && session.isLocked() && !systemQuitting);
+
+function persistActive(force = false) {
+  if (!activeFile) return;
+  if (!session || !session.strict || session.surrendered) return clearActive();
+  if (!force && Date.now() - lastPersist < 10000) return;
+  lastPersist = Date.now();
+  try {
+    writeJsonAtomic(activeFile, session.snapshot());
+  } catch (err) {
+    console.error('[lock]', err.message);
+  }
+}
+
+// Компьютер выключается: это не попытка сбежать, сессия продолжится после включения.
+function markSystemShutdown() {
+  systemQuitting = true;
+  if (session && session.strict) session.systemShutdown = true;
+  persistActive(true);
+}
+
+function clearActive() {
+  if (activeFile) fs.rm(activeFile, { force: true }, () => {});
+}
+
+// Попытка выключить во время блокировки: Акыл бежит к центру и ругается, чем дальше — тем злее.
+function blockAttempt() {
+  session.shutdownAttempts += 1;
+  persistActive(true);
+  const text = mentor.blockLine({ n: session.shutdownAttempts, goal: session.goal, leftSec: session.lockLeftSec() });
+  say(text, { mood: 'worried', action: 'blocked' });
+  notifyPanel();
+  return text;
+}
+
+function surrender() {
+  if (!session) return null;
+  session.surrendered = true;
+  clearActive();
+  say(mentor.line('surrender'), { mood: 'normal' });
+  setTimeout(endSession, 1500);
+  return true;
+}
 
 function createOverlay() {
   const { workArea } = screen.getPrimaryDisplay();
@@ -70,6 +124,14 @@ function createOverlay() {
   // Клики проходят сквозь прозрачное окно; renderer включает приём мыши, когда курсор над Акылом или панелью.
   win.setIgnoreMouseEvents(true, { forward: true });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  // Alt+F4 по оверлею тоже не выключает Акыла во время блокировки.
+  win.on('close', (e) => {
+    if (!locked()) return;
+    e.preventDefault();
+    blockAttempt();
+  });
+  // Windows выключается или перезагружается: не мешаем, сессия сохранена и продолжится.
+  win.on('query-session-end', markSystemShutdown);
 }
 
 function restartVisionTimer() {
@@ -93,8 +155,17 @@ function startMentor() {
 // Выключение сохраняет незавершённую сессию в историю, чтобы время не пропало.
 function stopMentor() {
   if (!mentorOn()) return;
+  if (locked()) {
+    blockAttempt();
+    return;
+  }
   if (session) {
-    store.addSession(session.summary());
+    // Компьютер выключается посреди заблокированной сессии: она продолжится после включения, в историю пока не пишем.
+    if (systemQuitting && session.strict && session.isLocked()) persistActive(true);
+    else {
+      store.addSession(session.summary());
+      clearActive();
+    }
     session = null;
   }
   clearInterval(tickTimer);
@@ -159,6 +230,9 @@ function panelState() {
     ai: mentor.hasAI(),
     canAutostart: app.isPackaged,
     canEncrypt: safeStorage.isEncryptionAvailable(),
+    locked: locked(),
+    lockLeftSec: session ? session.lockLeftSec() : 0,
+    attempts: session ? session.shutdownAttempts : 0,
   };
 }
 
@@ -187,6 +261,7 @@ function liveState() {
     model: mentor.MODEL,
     trackingSupported: watcher.supported,
     buddySize: settings.data.buddySize,
+    strictDefault: settings.data.strictMode,
     platform: process.platform,
   };
 }
@@ -243,7 +318,12 @@ function handleEvent(ev, w, v) {
   }
   if (ev === 'back') say(mentor.line('back', vars), { mood: 'happy', action: 'jump' });
   if (ev === 'break-over') say(mentor.line('breakOver', vars), { mood: 'normal', action: 'wake' });
-  if (ev === 'time-up') say(mentor.line('timeUp', vars), { mood: 'happy', action: 'jump', quick: ['✅ Завершить', '➕ Ещё 15 минут'] });
+  if (ev === 'time-up') {
+    const unlocked = session.strict && !session.surrendered ? ` ${mentor.line('unlocked')}` : '';
+    say(mentor.line('timeUp', vars) + unlocked, { mood: 'happy', action: 'jump', quick: ['✅ Завершить', '➕ Ещё 15 минут'] });
+    buildTrayMenu();
+    notifyPanel();
+  }
 }
 
 function tick() {
@@ -254,6 +334,7 @@ function tick() {
   const events = session.record(v, TICK_MS / 1000);
   send('activity', { window: w, verdict: v, state: liveState() });
   events.forEach((ev) => handleEvent(ev, w, v));
+  persistActive();
 }
 
 async function visionTick() {
@@ -272,9 +353,12 @@ async function visionTick() {
   }
 }
 
-function startSession({ goal, minutes, vision }) {
+function startSession({ goal, minutes, vision, strict }) {
+  if (locked()) return liveState(); // новую сессию поверх заблокированной не начать
   if (typeof vision === 'boolean') visionEnabled = vision;
-  session = new Session({ goal, minutes, driftSec: settings.data.driftSec });
+  const strictOn = typeof strict === 'boolean' ? strict : settings.data.strictMode;
+  session = new Session({ goal, minutes, driftSec: settings.data.driftSec, strict: strictOn });
+  persistActive(true);
   chatHistory = [];
   lastVision = null;
   say(mentor.startLine(session.goal, store.memory()), { mood: 'happy', action: 'jump' });
@@ -285,6 +369,12 @@ function startSession({ goal, minutes, vision }) {
 
 function endSession() {
   if (!session) return null;
+  if (locked()) {
+    // Досрочно завершить нельзя — только сдаться.
+    say(mentor.line('endEarly', { left: mentor.fmtMin(session.lockLeftSec()) }), { mood: 'worried', action: 'blocked' });
+    return null;
+  }
+  clearActive();
   const summary = session.summary();
   const memoryBefore = store.memory(); // сравниваем с прошлым, без текущей сессии
   store.addSession(summary);
@@ -329,21 +419,24 @@ function applyAction(res) {
   } else if (res.action === 'extend') {
     session.extend(res.minutes || 15);
   } else if (res.action === 'end_session') {
-    setTimeout(endSession, 1200);
+    if (locked()) res.reply = mentor.line('endEarly', { left: mentor.fmtMin(session.lockLeftSec()) });
+    else setTimeout(endSession, 1200);
   }
 }
 
 function buildTrayMenu() {
   if (!tray) return;
   const on = mentorOn();
+  const lock = locked();
   tray.setContextMenu(
     Menu.buildFromTemplate([
       { label: 'Открыть Nazar', click: openPanel },
-      { label: on ? 'Выключить Акыла' : 'Включить Акыла', click: toggleMentor },
+      { label: lock ? '🔒 Выключить Акыла (заблокировано)' : on ? 'Выключить Акыла' : 'Включить Акыла', click: toggleMentor },
       { type: 'separator' },
       { label: session ? `🎯 ${session.goal}` : 'Нет активной сессии', enabled: false },
-      { label: 'Новая сессия…', enabled: on, click: () => send('open-onboarding') },
-      { label: 'Завершить сессию и показать чек', enabled: Boolean(session), click: endSession },
+      { label: 'Новая сессия…', enabled: on && !lock, click: () => send('open-onboarding') },
+      { label: lock ? '🔒 Завершить сессию (только после таймера)' : 'Завершить сессию и показать чек', enabled: Boolean(session), click: endSession },
+      ...(lock ? [{ label: '🏳 Сдаться досрочно…', click: openPanel }] : []),
       { label: 'Чат с Акылом  (Ctrl+Shift+Space)', enabled: on, click: () => openChat() },
       { type: 'separator' },
       {
@@ -359,7 +452,7 @@ function buildTrayMenu() {
       { label: 'Демо: отвлечение на Reels  (Ctrl+Shift+9)', enabled: on, click: () => demo.distract() },
       { label: 'Демо: работа в VS Code  (Ctrl+Shift+0)', enabled: on, click: () => demo.work() },
       { type: 'separator' },
-      { label: 'Выход', click: () => app.quit() },
+      { label: lock ? '🔒 Выход (после сессии)' : 'Выход', click: () => app.quit() },
     ])
   );
 }
@@ -391,6 +484,12 @@ ipcMain.handle('set-vision', (_e, on) => {
   return liveState();
 });
 ipcMain.handle('chat', async (_e, text) => {
+  const t = String(text).toLowerCase();
+  if (locked() && /сда[её]?юсь|сдаюс|берілемін/.test(t) && !/не\s+сда/.test(t)) {
+    const reply = mentor.line('surrender');
+    surrender();
+    return { reply, action: 'end_session', minutes: 0, ai: false };
+  }
   const res = await mentor.chat(chatHistory, String(text).slice(0, 1000), chatContext());
   applyAction(res); // может дописать reply (например, «запомнил»)
   chatHistory.push({ role: 'user', content: String(text) }, { role: 'assistant', content: res.reply });
@@ -400,8 +499,16 @@ ipcMain.handle('chat', async (_e, text) => {
 // Окно управления
 ipcMain.handle('panel-get', () => panelState());
 ipcMain.handle('panel-toggle', () => {
-  toggleMentor();
+  toggleMentor(); // при блокировке не выключит, а отругает
   return panelState();
+});
+// Сдаться можно, только вписав «я сдаюсь»: так выход есть всегда, но он осознанный.
+ipcMain.handle('panel-surrender', (_e, phrase) => {
+  if (!locked()) return { ok: false, error: 'Сессия не заблокирована', state: panelState() };
+  const norm = String(phrase || '').toLowerCase().replace(/ё/g, 'е').replace(/[^\p{L}\s]/gu, '').replace(/\s+/g, ' ').trim();
+  if (norm !== 'я сдаюсь') return { ok: false, error: 'Впиши ровно: я сдаюсь', state: panelState() };
+  surrender();
+  return { ok: true, state: panelState() };
 });
 ipcMain.handle('panel-save', (_e, patch) => {
   try {
@@ -428,7 +535,14 @@ function envDefaults() {
 }
 
 app.on('second-instance', () => openPanel());
-app.on('before-quit', () => (quitting = true));
+app.on('before-quit', (e) => {
+  if (locked()) {
+    e.preventDefault();
+    blockAttempt();
+    return;
+  }
+  quitting = true;
+});
 app.on('window-all-closed', () => {}); // приложение живёт в трее, закрытие окон его не завершает
 
 app.whenReady().then(() => {
@@ -444,10 +558,42 @@ app.whenReady().then(() => {
   tray.setToolTip('Nazar — ментор Акыл');
   tray.on('click', openPanel);
   applySettings();
-  if (settings.data.startMentorOnOpen || HIDDEN_START) startMentor();
+  powerMonitor.on('shutdown', markSystemShutdown);
+  activeFile = path.join(app.getPath('userData'), 'nazar-active.json');
+  const restored = restoreActive();
+  if (restored || settings.data.startMentorOnOpen || HIDDEN_START) startMentor();
+  if (restored) {
+    // Nazar убили посреди заблокированной сессии: продолжаем и высказываем всё, что думаем.
+    setTimeout(() => {
+      if (!session) return;
+      const vars = { goal: session.goal, left: mentor.fmtMin(session.lockLeftSec()) };
+      if (restoredKind === 'killed') say(mentor.line('killed', vars), { mood: 'worried', action: 'blocked' });
+      else say(mentor.line('resumed', vars), { mood: 'normal', action: 'jump' });
+    }, 5000);
+  }
   if (!HIDDEN_START) openPanel();
   if (process.platform === 'darwin' && app.dock && HIDDEN_START) app.dock.hide();
 });
+
+// Снимок заблокированной сессии остался — значит, Nazar закрыли не по-честному (или выключился компьютер).
+function restoreActive() {
+  const snap = readJsonSafe(activeFile);
+  if (!snap || !snap.startedAt) return false;
+  const restoredSession = Session.restore(snap);
+  if (restoredSession.isLocked()) {
+    session = restoredSession;
+    restoredKind = session.systemShutdown ? 'reboot' : 'killed';
+    if (restoredKind === 'killed') session.shutdownAttempts += 1;
+    delete session.systemShutdown;
+    persistActive(true);
+    return true;
+  }
+  // Время сессии уже вышло, пока Nazar был закрыт: сохраняем её в историю, чтобы ничего не пропало.
+  const end = restoredSession.startedAt + restoredSession.plannedMin * 60000;
+  store.addSession(restoredSession.summary(end));
+  clearActive();
+  return false;
+}
 
 app.on('will-quit', () => {
   stopMentor();
