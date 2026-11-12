@@ -16,6 +16,7 @@ const DEFAULTS = {
   startMentorOnOpen: true,
   autoStart: false,
   strictMode: false,
+  speak: false,
   distractSites: [],
   focusSites: [],
   driftLines: [],
@@ -61,6 +62,7 @@ function normalize(input = {}, base = DEFAULTS) {
     startMentorOnOpen: Boolean(s.startMentorOnOpen),
     autoStart: Boolean(s.autoStart),
     strictMode: Boolean(s.strictMode),
+    speak: Boolean(s.speak),
   };
   for (const [key, limits] of Object.entries(LIST_LIMITS)) out[key] = cleanList(s[key], limits);
   return out;

@@ -7,7 +7,7 @@
   const S = NazarSprites;
 
   const NUMBERS = ['driftSec', 'visionIntervalSec'];
-  const CHECKS = ['startMentorOnOpen', 'autoStart', 'vision', 'strictMode'];
+  const CHECKS = ['startMentorOnOpen', 'autoStart', 'vision', 'strictMode', 'speak'];
   const LISTS = ['focusSites', 'distractSites', 'driftLines', 'backLines'];
 
   let dirty = false;

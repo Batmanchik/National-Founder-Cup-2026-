@@ -16,8 +16,7 @@
   let minutes = 25;
   let bubbleTimer = null;
   let typeTimer = null;
-  let voiceOn = false;
-  try { voiceOn = localStorage.getItem('voice') === '1'; } catch { /* нет хранилища */ }
+  let voiceOn = false; // берётся из настроек (state.speak)
 
   // ---------- Клики сквозь прозрачное окно ----------
   // Окно ловит мышь только когда курсор над элементом с классом .interactive.
@@ -91,15 +90,40 @@
     placeChat(x, y);
   };
 
-  function speak(text) {
-    if (!voiceOn || !text || !window.speechSynthesis) return;
+  // Голос: нейросеть Piper из главного процесса (офлайн), иначе — лучший системный голос без «робо-писка».
+  let currentAudio = null;
+  let speakSeq = 0;
+  function systemSpeak(text) {
+    if (!window.speechSynthesis) return;
     speechSynthesis.cancel();
     const spoken = text.replace(/[#@$%&*!]{3,}/g, ' пи-ип! ').replace(/\*/g, '');
     const u = new SpeechSynthesisUtterance(spoken.replace(/[^\p{L}\p{N}\s.,!?«»—-]/gu, ''));
     u.lang = 'ru-RU';
-    u.pitch = 1.6;
-    u.rate = 1.1;
+    const ru = speechSynthesis.getVoices().filter((v) => v.lang && v.lang.startsWith('ru'));
+    u.voice = ru.find((v) => /natural|online|neural/i.test(v.name)) || ru[0] || null;
+    u.pitch = 1.05;
+    u.rate = 1.05;
     speechSynthesis.speak(u);
+  }
+  async function speak(text) {
+    if (!voiceOn || !text) return;
+    const seq = ++speakSeq;
+    let wav = null;
+    try {
+      wav = await api.tts(text);
+    } catch {
+      wav = null;
+    }
+    if (seq !== speakSeq) return; // уже сказал что-то новее
+    if (!wav) return systemSpeak(text);
+    if (currentAudio) currentAudio.pause();
+    const url = URL.createObjectURL(new Blob([wav], { type: 'audio/wav' }));
+    const a = new Audio(url);
+    a.preservesPitch = false;
+    a.playbackRate = 1.06; // чуть выше и бодрее — голос мультяшного персонажа
+    a.onended = () => URL.revokeObjectURL(url);
+    currentAudio = a;
+    a.play().catch(() => systemSpeak(text));
   }
 
   function say(text, opts = {}) {
@@ -294,6 +318,10 @@
 
   function applyLook(s) {
     if (s && s.buddySize) buddy.setSize(s.buddySize);
+    if (s && typeof s.speak === 'boolean') {
+      voiceOn = s.speak;
+      $('voice-toggle').textContent = voiceOn ? '🔊' : '🔇';
+    }
   }
 
   api.on('activity', ({ verdict, state: s }) => {
@@ -406,7 +434,11 @@
   $('chat-close').addEventListener('click', () => (panels.chat.hidden = true));
   $('voice-toggle').addEventListener('click', () => {
     voiceOn = !voiceOn;
-    try { localStorage.setItem('voice', voiceOn ? '1' : '0'); } catch { /* нет хранилища */ }
+    api.setSpeak(voiceOn);
+    if (!voiceOn) {
+      if (currentAudio) currentAudio.pause();
+      if (window.speechSynthesis) speechSynthesis.cancel();
+    }
     $('voice-toggle').textContent = voiceOn ? '🔊' : '🔇';
   });
 

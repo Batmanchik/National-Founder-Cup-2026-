@@ -1,20 +1,22 @@
 {
   "name": "nazar-mentor",
-  "version": "0.4.5",
+  "version": "0.5.0",
   "description": "Nazar — пиксельный ИИ-ментор на экране ноутбука, который помогает удерживать цель и показывает честный чек внимания",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
     "test": "node --test test/*.test.js",
     "icons": "node scripts/make-icon.js",
-    "dist": "npm run icons && electron-builder --publish never",
-    "dist:win": "npm run icons && electron-builder --win --publish never",
-    "install-app": "node scripts/install-windows.js"
+    "dist": "npm run icons && npm run voice && electron-builder --publish never",
+    "dist:win": "npm run icons && npm run voice && electron-builder --win --publish never",
+    "install-app": "node scripts/install-windows.js",
+    "voice": "node scripts/fetch-voice.js"
   },
   "license": "MIT",
   "dependencies": {
     "@anthropic-ai/sdk": "1.2.0",
-    "dotenv": "16.4.5"
+    "dotenv": "16.4.5",
+    "sherpa-onnx-node": "1.13.8"
   },
   "devDependencies": {
     "electron": "44.9.3",
@@ -71,7 +73,7 @@
         {
           "target": "dmg",
           "arch": [
-            "universal"
+            "arm64"
           ]
         }
       ],
@@ -93,6 +95,19 @@
       "icon": "build/icon.png",
       "category": "Utility",
       "artifactName": "Nazar-${version}-linux.${ext}"
-    }
+    },
+    "extraResources": [
+      {
+        "from": "voice",
+        "to": "voice",
+        "filter": [
+          "**/*",
+          "!*.tar.bz2"
+        ]
+      }
+    ],
+    "asarUnpack": [
+      "node_modules/sherpa-onnx-*/**"
+    ]
   }
 }

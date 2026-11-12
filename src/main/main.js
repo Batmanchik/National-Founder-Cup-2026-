@@ -9,6 +9,7 @@ const { Session, applyIdle } = require('./session');
 const { Store } = require('./store');
 const { SettingsStore } = require('./settings');
 const mentor = require('./mentor');
+const voice = require('./voice');
 const { makeTrayIcon } = require('./icon');
 const { writeJsonAtomic, readJsonSafe } = require('../shared/fsutil');
 const fs = require('fs');
@@ -262,6 +263,7 @@ function liveState() {
     trackingSupported: watcher.supported,
     buddySize: settings.data.buddySize,
     strictDefault: settings.data.strictMode,
+    speak: settings.data.speak,
     platform: process.platform,
   };
 }
@@ -476,6 +478,21 @@ ipcMain.on('set-interactive', (_e, on) => {
   else win.setIgnoreMouseEvents(true, { forward: true });
 });
 ipcMain.handle('get-state', () => liveState());
+// Голос Акыла: WAV от нейросети Piper или null (тогда интерфейс говорит системным синтезатором).
+ipcMain.handle('tts', async (_e, text) => {
+  try {
+    return await voice.speak(app, String(text || '').slice(0, 600));
+  } catch (err) {
+    console.error('[voice]', err.message);
+    return null;
+  }
+});
+ipcMain.handle('set-speak', (_e, on) => {
+  settings.update({ speak: Boolean(on) });
+  notifyPanel();
+  send('state', liveState());
+  return settings.data.speak;
+});
 ipcMain.handle('start-session', (_e, opts) => startSession(opts || {}));
 ipcMain.handle('end-session', () => endSession());
 ipcMain.handle('set-vision', (_e, on) => {
