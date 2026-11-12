@@ -61,6 +61,8 @@
       this.act = null; // { name, until } — короткое занятие: wave, stretch, yawn, look, read, cheer
       this.lookAt = null; // { x, y } курсора, если он рядом
       this.homeX = null; // где стоял до пробежки к центру
+      this.angry = false;
+      this.nextStomp = 0;
       this.t = 0;
       this.onMove = null;
       this._last = performance.now();
@@ -105,6 +107,11 @@
     wake() { if (this.mode === 'sleep') { this.mode = 'idle'; this.idleUntil = performance.now() + 800; this.jump(); } }
     talk(ms) { this.talkingUntil = performance.now() + ms; }
     setMood(m) { this.mood = m; }
+    // Злится, пока человек сидит в ленте: брови домиком, кричит, трясёт кулаками и топает.
+    setAngry(on) {
+      this.angry = Boolean(on);
+      if (on) this.act = null;
+    }
 
     // Что делает человек: от этого зависит, чем занят Акыл.
     setContext(ctx) {
@@ -188,6 +195,14 @@
         }
         case 'idle':
           this.y = g;
+          if (this.angry) {
+            // Топает: короткие подскоки раз в ~1,2 с
+            if (now > this.nextStomp) {
+              this.jumpT = 0.18;
+              this.nextStomp = now + rand(900, 1500);
+            }
+            break;
+          }
           if (this.act) break;
           // Во время фокуса не гуляет: стоит там, где его оставили.
           if (now > this.nextAct) this._chooseAct(now);
@@ -253,12 +268,18 @@
       if (name === 'yawn') mouth = 'yawn';
       if (name === 'cheer' || name === 'wave') mouth = 'smile';
       if (now < this.talkingUntil && Math.floor(this.t / 0.14) % 2) mouth = 'talk';
+      if (this.angry && this.mode !== 'sleep' && this.mode !== 'drag') {
+        const beat = Math.floor(this.t / 0.16) % 2;
+        eyes = now > this.nextBlink ? 'blink' : 'angry';
+        arms = this.mode === 'run' ? 'fist' : beat ? 'fist' : 'fist2';
+        mouth = now < this.talkingUntil ? (beat ? 'shout' : 'frown') : 'frown';
+      }
       if (this.mode === 'sleep') {
         eyes = 'blink';
         mouth = 'neutral';
         arms = 'down';
       }
-      return { eyes, mouth, arms, legs, sweat: this.mood === 'worried' ? 'yes' : 'no' };
+      return { eyes, mouth, arms, legs, sweat: this.mood === 'worried' && !this.angry ? 'yes' : 'no' };
     }
 
     _draw(now) {

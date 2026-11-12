@@ -137,17 +137,63 @@
     else if (label.includes('Возвращаюсь')) say('Жду! Я рядом 👀', { mood: 'happy' });
   }
 
+  // ---------- Ругается, пока человек в ленте ----------
+  // Красный «!» висит над головой, Акыл злится и каждые ~12 с ворчит новой фразой.
+  // Как только человек вернулся к делу (или перерыв, или конец сессии) — успокаивается.
+  const SCOLD = [
+    'Эй! Ну-ка закрывай {label}! 😤',
+    'Ойбай! Опять {label}?!',
+    'Я всё вижу! «{goal}» сама себя не сделает!',
+    'Так, хватит листать! Возвращайся!',
+    'Цель была «{goal}», а не {label}!',
+    'Ну сколько можно?! {label} подождёт!',
+    'Я сейчас обижусь! 😠 Работать!',
+    'Ещё минута в ленте — и я начну топать громче!',
+    'Балапан, работать пора! Закрывай это!',
+  ];
+  let scoldTimer = null;
+  let scoldCount = 0;
+  let scoldLabel = 'ленту';
+  let lastScold = '';
+  function scoldLine() {
+    const goal = (state && state.session && state.session.goal) || 'цель';
+    let line;
+    do line = pick(SCOLD); while (line === lastScold && SCOLD.length > 1);
+    lastScold = line;
+    return line.replace('{goal}', goal).replace('{label}', scoldLabel);
+  }
+  function startScolding() {
+    $('alert-mark').hidden = false;
+    buddy.setAngry(true);
+    if (scoldTimer) return;
+    scoldCount = 0;
+    scoldTimer = setInterval(() => {
+      if (!panels.chat.hidden) return; // не перебиваем, пока человек пишет в чат
+      scoldCount += 1;
+      // После 6 фраз замолкает, но остаётся злым и с «!»: молчаливый укор.
+      if (scoldCount > 6) return;
+      say(scoldLine(), { mood: 'worried', quick: ['↩️ Возвращаюсь', '✅ Это по работе'], sticky: true });
+    }, 12000);
+  }
+  function stopScolding() {
+    if (!scoldTimer && $('alert-mark').hidden && !buddy.angry) return;
+    clearInterval(scoldTimer);
+    scoldTimer = null;
+    $('alert-mark').hidden = true;
+    buddy.setAngry(false);
+  }
+
   // ---------- Реакции на события ----------
   function react(msg) {
     const { mood = 'normal', action } = msg;
     buddy.setMood(mood);
     if (action === 'run') {
       buddy.runTo(window.innerWidth / 2 - buddy.width / 2);
-      $('alert-mark').hidden = false;
-      setTimeout(() => ($('alert-mark').hidden = true), 2500);
+      startScolding();
     }
     if (action === 'jump') buddy.jump();
     if (action === 'sleep') {
+      stopScolding();
       buddy.sleep();
       $('zzz').hidden = false;
     }
@@ -203,12 +249,18 @@
     renderHud(s);
     const l = s.session;
     if (!l) {
+      stopScolding();
       buddy.setContext('none');
       focusMilestone = 0;
       return;
     }
-    if (l.onBreak) return buddy.setContext('break');
+    if (l.onBreak) {
+      stopScolding();
+      return buddy.setContext('break');
+    }
     const cat = verdict ? verdict.category : 'neutral';
+    if (cat === 'distraction' && verdict.label) scoldLabel = verdict.label;
+    if (cat === 'focus' || cat === 'away') stopScolding();
     buddy.setContext(cat === 'distraction' ? 'distraction' : 'focus');
     if (cat === 'focus') buddy.goHome();
     const m = Math.floor(l.totals.focus / 600);
@@ -339,6 +391,7 @@
   let reportId = null;
   api.on('report', ({ summary: s, profile: p }) => {
     reportId = s.id;
+    stopScolding();
     Object.values(panels).forEach((x) => (x.hidden = true));
     bubble.hidden = true;
     $('zzz').hidden = true;
