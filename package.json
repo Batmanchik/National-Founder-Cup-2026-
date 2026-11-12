@@ -1,6 +1,6 @@
 {
   "name": "nazar-mentor",
-  "version": "0.4.4",
+  "version": "0.4.5",
   "description": "Nazar — пиксельный ИИ-ментор на экране ноутбука, который помогает удерживать цель и показывает честный чек внимания",
   "main": "src/main/main.js",
   "scripts": {
