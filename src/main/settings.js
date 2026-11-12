@@ -5,7 +5,10 @@ const { writeJsonAtomic, readJsonSafe } = require('../shared/fsutil');
 
 const MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'];
 
+const BUDDY_SIZES = ['small', 'medium', 'large'];
+
 const DEFAULTS = {
+  buddySize: 'medium',
   driftSec: 20,
   model: 'claude-opus-5-5',
   vision: false,
@@ -49,6 +52,7 @@ function cleanList(value, { items, chars }) {
 function normalize(input = {}, base = DEFAULTS) {
   const s = { ...base, ...input };
   const out = {
+    buddySize: BUDDY_SIZES.includes(s.buddySize) ? s.buddySize : base.buddySize,
     driftSec: clampInt(s.driftSec, 5, 300, base.driftSec),
     model: MODELS.includes(s.model) ? s.model : base.model,
     vision: Boolean(s.vision),
@@ -110,4 +114,4 @@ class SettingsStore {
   }
 }
 
-module.exports = { SettingsStore, normalize, DEFAULTS, MODELS };
+module.exports = { SettingsStore, normalize, DEFAULTS, MODELS, BUDDY_SIZES };

@@ -1,12 +1,16 @@
-// Поведение и отрисовка Акыла: гуляет по низу экрана, бегает к центру при отвлечении,
-// прыгает от радости, спит на перерыве, его можно перетащить мышкой (он падает обратно на «пол»).
+// Поведение и отрисовка Акыла.
+// Он живёт внизу экрана и ведёт себя по ситуации, но спокойно, чтобы не отвлекать:
+//  • без сессии гуляет, читает книжку, потягивается, оглядывается;
+//  • во время фокуса стоит на месте и «работает рядом» на ноутбуке (почти без движения);
+//  • при отвлечении волнуется и бежит к центру (это делает app.js по событию);
+//  • на перерыве спит; ночью чаще зевает;
+//  • следит глазами за курсором, машет, когда наводишь на него мышь;
+//  • его можно перетащить мышкой (он падает обратно на «пол»).
 /* global NazarSprites */
 (function () {
   'use strict';
   const S = NazarSprites;
-  const SCALE = 5;
-  const W = S.WIDTH * SCALE;
-  const H = S.HEIGHT * SCALE;
+  const SIZES = { small: 3, medium: 4, large: 5 };
   const GROUND_GAP = 18; // место под HUD
 
   const cache = new Map();
@@ -29,25 +33,34 @@
     return c;
   }
 
+  const rand = (a, b) => a + Math.random() * (b - a);
+  const isNight = () => {
+    const h = new Date().getHours();
+    return h >= 23 || h < 5;
+  };
+
   class Buddy {
     constructor(el, canvas) {
       this.el = el;
       this.canvas = canvas;
-      canvas.width = W;
-      canvas.height = H;
       this.ctx = canvas.getContext('2d');
-      this.ctx.imageSmoothingEnabled = false;
-      this.x = -W;
+      this.setSize('medium');
+      this.x = -this.w;
       this.y = this.ground();
       this.vy = 0;
       this.facing = 1;
       this.mode = 'walk'; // walk | idle | run | fall | drag | sleep
       this.mood = 'normal'; // normal | happy | worried
+      this.context = 'none'; // none | focus | distraction | break — что сейчас делает человек
       this.targetX = 160;
       this.idleUntil = 0;
       this.jumpT = 0;
       this.talkingUntil = 0;
       this.nextBlink = performance.now() + 2500;
+      this.nextAct = performance.now() + 4000;
+      this.act = null; // { name, until } — короткое занятие: wave, stretch, yawn, look, read, cheer
+      this.lookAt = null; // { x, y } курсора, если он рядом
+      this.homeX = null; // где стоял до пробежки к центру
       this.t = 0;
       this.onMove = null;
       this._last = performance.now();
@@ -55,32 +68,107 @@
       requestAnimationFrame(this._loop);
     }
 
-    get width() { return W; }
-    get height() { return H; }
-    ground() { return window.innerHeight - H - GROUND_GAP; }
+    setSize(name) {
+      const scale = SIZES[name] || SIZES.medium;
+      if (scale === this.scale) return;
+      this.scale = scale;
+      this.w = S.WIDTH * scale;
+      this.h = S.HEIGHT * scale;
+      this.canvas.width = this.w;
+      this.canvas.height = this.h;
+      this.ctx.imageSmoothingEnabled = false;
+      this.el.style.setProperty('--buddy-scale', scale);
+      if (this.mode && this.mode !== 'drag') this.y = this.ground();
+    }
 
-    walkTo(x) { this.targetX = this._clampX(x); this.mode = 'walk'; }
-    runTo(x) { this.targetX = this._clampX(x); this.mode = 'run'; }
+    get width() { return this.w; }
+    get height() { return this.h; }
+    ground() { return window.innerHeight - this.h - GROUND_GAP; }
+
+    walkTo(x) { this.targetX = this._clampX(x); this.mode = 'walk'; this.act = null; }
+    // Бежит к x (например, к центру при отвлечении) и запоминает, где стоял, чтобы потом вернуться.
+    runTo(x) {
+      if (this.homeX == null && this.mode !== 'run') this.homeX = this.x;
+      this.targetX = this._clampX(x);
+      this.mode = 'run';
+      this.act = null;
+    }
+    // Возвращается на своё место, чтобы не мешать в центре экрана.
+    goHome() {
+      if (this.homeX == null || this.mode === 'drag' || this.mode === 'sleep') return;
+      const x = this.homeX;
+      this.homeX = null;
+      this.walkTo(x);
+    }
     jump() { this.jumpT = 0.45; }
-    sleep() { this.mode = 'sleep'; }
+    sleep() { this.mode = 'sleep'; this.act = null; }
     wake() { if (this.mode === 'sleep') { this.mode = 'idle'; this.idleUntil = performance.now() + 800; this.jump(); } }
     talk(ms) { this.talkingUntil = performance.now() + ms; }
     setMood(m) { this.mood = m; }
 
-    startDrag() { this.mode = 'drag'; }
-    dragTo(x, y) { this.x = this._clampX(x); this.y = Math.min(this.ground(), Math.max(0, y)); }
-    drop() { this.mode = 'fall'; this.vy = 0; }
+    // Что делает человек: от этого зависит, чем занят Акыл.
+    setContext(ctx) {
+      if (ctx === this.context) return;
+      this.context = ctx;
+      if (this.act && (this.act.name === 'read' || this.act.name === 'work')) this.act = null;
+      this.nextAct = performance.now() + rand(800, 2000);
+    }
 
-    _clampX(x) { return Math.max(4, Math.min(window.innerWidth - W - 4, x)); }
+    // Короткое занятие на ms миллисекунд (если он не бежит, не спит и его не тащат).
+    doAct(name, ms) {
+      if (this.mode !== 'idle' && this.mode !== 'walk') return false;
+      if (this.mode === 'walk') this.mode = 'idle';
+      this.act = { name, until: performance.now() + ms };
+      this.idleUntil = Math.max(this.idleUntil, this.act.until + 500);
+      return true;
+    }
+    wave() { return this.doAct('wave', 1400); }
+    cheer() { this.jump(); return this.doAct('cheer', 1600); }
+    lookToward(x, y) { this.lookAt = x == null ? null : { x, y }; }
+
+    startDrag() { this.mode = 'drag'; this.act = null; }
+    dragTo(x, y) { this.x = this._clampX(x); this.y = Math.min(this.ground(), Math.max(0, y)); }
+    drop() { this.mode = 'fall'; this.vy = 0; this.homeX = null; }
+
+    _clampX(x) { return Math.max(4, Math.min(window.innerWidth - this.w - 4, x)); }
 
     _pickWanderTarget() {
       const span = Math.min(420, window.innerWidth / 2);
       this.walkTo(this.x + (Math.random() * 2 - 1) * span);
     }
 
+    // Выбор следующего занятия, пока он стоит. Во время фокуса — только тихие занятия на месте.
+    _chooseAct(now) {
+      this.nextAct = now + rand(6000, 14000);
+      if (this.context === 'focus') {
+        // Работает рядом; изредка потягивается или зевает (ночью чаще).
+        const r = Math.random();
+        if (r < (isNight() ? 0.25 : 0.08)) return this.doAct('yawn', 1800);
+        if (r < 0.15) return this.doAct('stretch', 1200);
+        return this.doAct('work', rand(15000, 30000));
+      }
+      if (this.context === 'distraction') return this.doAct('look', 1500);
+      const options = [
+        ['look', 1600, 3],
+        ['read', rand(8000, 16000), 2],
+        ['stretch', 1200, 1],
+        ['yawn', 1800, isNight() ? 3 : 0.5],
+        ['wander', 0, 3],
+      ];
+      let total = options.reduce((s, o) => s + o[2], 0);
+      let r = Math.random() * total;
+      for (const [name, ms, weight] of options) {
+        if ((r -= weight) > 0) continue;
+        if (name === 'wander') return this._pickWanderTarget();
+        return this.doAct(name, ms);
+      }
+      return null;
+    }
+
     _update(dt, now) {
       this.t += dt;
       if (this.jumpT > 0) this.jumpT = Math.max(0, this.jumpT - dt);
+      if (this.act && now > this.act.until) this.act = null;
       const g = this.ground();
       switch (this.mode) {
         case 'walk':
@@ -90,7 +178,7 @@
           if (Math.abs(dx) < 3) {
             if (this.mode === 'run') this.jump();
             this.mode = 'idle';
-            this.idleUntil = now + 2500 + Math.random() * 5000;
+            this.idleUntil = now + rand(2500, 7500);
           } else {
             this.facing = dx > 0 ? 1 : -1;
             this.x += Math.sign(dx) * Math.min(Math.abs(dx), speed * dt);
@@ -100,7 +188,10 @@
         }
         case 'idle':
           this.y = g;
-          if (now > this.idleUntil && this.mood !== 'worried') this._pickWanderTarget();
+          if (this.act) break;
+          // Во время фокуса не гуляет: стоит там, где его оставили.
+          if (now > this.nextAct) this._chooseAct(now);
+          else if (now > this.idleUntil && this.context === 'none' && this.mood !== 'worried' && Math.random() < 0.002) this._pickWanderTarget();
           break;
         case 'fall':
           this.vy += 2200 * dt;
@@ -120,18 +211,48 @@
       }
     }
 
+    // Куда смотрят глаза: на курсор, если он рядом, или по занятию.
+    _eyes(now) {
+      if (now > this.nextBlink) {
+        if (now > this.nextBlink + 140) this.nextBlink = now + rand(2500, 5500);
+        return 'blink';
+      }
+      const name = this.act && this.act.name;
+      if (name === 'work' || name === 'read') return 'down';
+      if (name === 'wave' || name === 'cheer' || this.mood === 'happy') return 'happy';
+      if (name === 'yawn') return 'blink';
+      let dir = 0;
+      if (this.lookAt) {
+        const cx = this.x + this.w / 2;
+        const d = this.lookAt.x - cx;
+        if (Math.abs(d) > this.w * 0.6) dir = Math.sign(d);
+      } else if (name === 'look') {
+        dir = Math.sin(this.t * 2.2) > 0 ? 1 : -1;
+      }
+      if (!dir) return 'open';
+      // Кадр отражается, когда он смотрит влево, поэтому сторона взгляда тоже отражается.
+      return dir * this.facing > 0 ? 'right' : 'left';
+    }
+
     _frameOpts(now) {
       const moving = this.mode === 'walk' || this.mode === 'run' || this.mode === 'drag';
       const stepRate = this.mode === 'run' ? 0.09 : 0.18;
       const legs = moving ? (Math.floor(this.t / stepRate) % 2 ? 'walkA' : 'walkB') : 'stand';
-      let eyes = 'open';
-      if (now > this.nextBlink) {
-        eyes = 'blink';
-        if (now > this.nextBlink + 140) this.nextBlink = now + 2500 + Math.random() * 3000;
-      }
+      let eyes = this._eyes(now);
       let mouth = this.mood === 'happy' ? 'smile' : this.mood === 'worried' ? 'worried' : 'neutral';
-      if (now < this.talkingUntil && Math.floor(this.t / 0.14) % 2) mouth = 'talk';
       let arms = this.jumpT > 0 || this.mode === 'drag' ? 'up' : 'down';
+      const name = this.act && this.act.name;
+      if (name === 'wave') arms = Math.floor(this.t / 0.22) % 2 ? 'wave' : 'wave2';
+      if (name === 'cheer' || name === 'stretch') arms = 'up';
+      if (name === 'read') arms = 'book';
+      if (name === 'work') {
+        // Печатает короткими «очередями» с паузами — движение почти незаметно краем глаза.
+        const typing = Math.sin(this.t * 0.9) > 0.2;
+        arms = typing && Math.floor(this.t / 0.2) % 2 ? 'laptop2' : 'laptop';
+      }
+      if (name === 'yawn') mouth = 'yawn';
+      if (name === 'cheer' || name === 'wave') mouth = 'smile';
+      if (now < this.talkingUntil && Math.floor(this.t / 0.14) % 2) mouth = 'talk';
       if (this.mode === 'sleep') {
         eyes = 'blink';
         mouth = 'neutral';
@@ -142,16 +263,17 @@
 
     _draw(now) {
       const ctx = this.ctx;
-      ctx.clearRect(0, 0, W, H);
+      ctx.clearRect(0, 0, this.w, this.h);
       ctx.save();
       if (this.facing < 0) {
-        ctx.translate(W, 0);
+        ctx.translate(this.w, 0);
         ctx.scale(-1, 1);
       }
-      ctx.drawImage(renderFrame(this._frameOpts(now)), 0, 0, W, H);
+      ctx.drawImage(renderFrame(this._frameOpts(now)), 0, 0, this.w, this.h);
       ctx.restore();
       // Прыжок — синусоида; при сне — лёгкое «дыхание».
-      const hop = this.jumpT > 0 ? Math.sin((this.jumpT / 0.45) * Math.PI) * 28 : 0;
+      const hopPx = this.scale * 5.6;
+      const hop = this.jumpT > 0 ? Math.sin((this.jumpT / 0.45) * Math.PI) * hopPx : 0;
       const breathe = this.mode === 'sleep' ? Math.round(Math.sin(this.t * 2) * 1.5) : 0;
       this.el.style.transform = `translate(${Math.round(this.x)}px, ${Math.round(this.y - hop + breathe)}px)`;
       if (this.onMove) this.onMove(this.x, this.y - hop);

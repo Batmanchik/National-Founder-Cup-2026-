@@ -52,6 +52,13 @@ html, body {
 }
 #zzz span { display: inline-block; animation: float 1.6s steps(4) infinite; }
 #zzz span:nth-child(2) { animation-delay: 0.5s; font-size: 14px; }
+#pop {
+  position: absolute; left: 50%; top: -14px; transform: translateX(-50%); white-space: nowrap;
+  font-family: 'PressStart', monospace; font-size: 9px; color: var(--yellow);
+  text-shadow: 1px 1px 0 var(--ink); pointer-events: none;
+}
+#pop.go { animation: rise 1.8s ease-out forwards; }
+@keyframes rise { 0% { opacity: 0; transform: translate(-50%, 6px); } 15% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -22px); } }
 @keyframes bob { 50% { transform: translate(-50%, -4px); } }
 @keyframes float { 0% { transform: translateY(0); opacity: 1; } 100% { transform: translateY(-14px); opacity: 0; } }
 

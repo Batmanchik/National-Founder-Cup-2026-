@@ -28,11 +28,22 @@
     interactive = on;
     api.setInteractive(on);
   }
+  let lastWave = 0;
   window.addEventListener('mousemove', (e) => {
     if (dragging) return;
     const el = document.elementFromPoint(e.clientX, e.clientY);
     setInteractive(Boolean(el && el.closest('.interactive')));
+    // Акыл следит глазами за курсором, если тот рядом, и машет, когда на него наводят мышь.
+    const cx = buddy.x + buddy.width / 2;
+    const cy = buddy.y + buddy.height / 2;
+    buddy.lookToward(Math.hypot(e.clientX - cx, e.clientY - cy) < 320 ? e.clientX : null, e.clientY);
+    const overBuddy = Boolean(el && el.closest('#buddy'));
+    if (overBuddy && performance.now() - lastWave > 20000 && panels.chat.hidden) {
+      lastWave = performance.now();
+      buddy.wave();
+    }
   });
+  window.addEventListener('mouseleave', () => buddy.lookToward(null));
 
   // ---------- Перетаскивание и клик по Акылу ----------
   let down = null;
@@ -171,10 +182,40 @@
     }
   }
 
+  // Каждые 10 минут фокуса — тихая радость: прыжок и «🔥 10 мин» над головой, без облачка.
+  let focusMilestone = 0;
+  function pop(text) {
+    const el = $('pop');
+    el.textContent = text;
+    el.hidden = false;
+    el.classList.remove('go');
+    void el.offsetWidth; // перезапуск CSS-анимации
+    el.classList.add('go');
+    setTimeout(() => (el.hidden = true), 1800);
+  }
+
+  function applyLook(s) {
+    if (s && s.buddySize) buddy.setSize(s.buddySize);
+  }
+
   api.on('activity', ({ verdict, state: s }) => {
     state = s;
     renderHud(s);
-    if (!s.session || s.session.onBreak) return;
+    const l = s.session;
+    if (!l) {
+      buddy.setContext('none');
+      focusMilestone = 0;
+      return;
+    }
+    if (l.onBreak) return buddy.setContext('break');
+    const cat = verdict ? verdict.category : 'neutral';
+    buddy.setContext(cat === 'distraction' ? 'distraction' : 'focus');
+    if (cat === 'focus') buddy.goHome();
+    const m = Math.floor(l.totals.focus / 600);
+    if (m > focusMilestone) {
+      focusMilestone = m;
+      if (buddy.cheer()) pop(`🔥 ${m * 10} мин`);
+    }
     // Лёгкое беспокойство, пока отвлечение ещё не дошло до напоминания
     if (verdict && verdict.category === 'distraction' && buddy.mood === 'normal') buddy.setMood('worried');
     if (verdict && verdict.category !== 'distraction' && buddy.mood === 'worried') buddy.setMood('normal');
@@ -182,6 +223,7 @@
   api.on('state', (s) => {
     state = s;
     renderHud(s);
+    applyLook(s);
   });
   api.on('vision', (v) => {
     $('hud-eye').title = `Акыл видит: ${v.activity}`;
@@ -344,11 +386,12 @@
   // ---------- Первый запуск: Акыл выходит из-за края экрана ----------
   api.getState().then((s) => {
     state = s;
+    applyLook(s);
     renderHud(s);
     buddy.walkTo(Math.min(260, window.innerWidth / 3));
     setTimeout(() => {
       say(pick(['Привет! Я Акыл, твой пиксельный ментор. Над чем работаем?', 'Салем! Я Акыл. Скажи цель — и я прослежу, чтобы лента её не украла.']), { ms: 5000 });
-      if (!s.session) setTimeout(openOnboarding, 1800);
+      if (!s.session) setTimeout(() => !(state && state.session) && openOnboarding(), 1800);
     }, 3500);
   });
 })();

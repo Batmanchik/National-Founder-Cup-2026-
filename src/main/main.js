@@ -186,6 +186,7 @@ function liveState() {
     ai: mentor.hasAI(),
     model: mentor.MODEL,
     trackingSupported: watcher.supported,
+    buddySize: settings.data.buddySize,
     platform: process.platform,
   };
 }

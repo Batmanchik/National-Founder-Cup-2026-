@@ -46,7 +46,7 @@
     const autoRow = $('autoStart').closest('label');
     $('autoStart').disabled = !st.canAutostart;
     autoRow.classList.toggle('off', !st.canAutostart);
-    autoRow.title = st.canAutostart ? '' : 'Доступно после установки через npm run install-app';
+    autoRow.title = st.canAutostart ? '' : 'Доступно в установленной версии (Nazar-Setup.exe)';
   }
 
   function fillForm(st) {
@@ -55,13 +55,14 @@
     CHECKS.forEach((k) => ($(k).checked = s[k]));
     LISTS.forEach((k) => ($(k).value = s[k].join('\n')));
     $('model').value = s.model;
+    $('buddySize').value = s.buddySize;
     $('apiKey').value = '';
     clearKey = false;
     dirty = false;
   }
 
   function readForm() {
-    const patch = { model: $('model').value, apiKey: $('apiKey').value, clearKey };
+    const patch = { buddySize: $('buddySize').value, model: $('model').value, apiKey: $('apiKey').value, clearKey };
     NUMBERS.forEach((k) => (patch[k] = $(k).value));
     CHECKS.forEach((k) => (patch[k] = $(k).checked));
     LISTS.forEach((k) => (patch[k] = $(k).value));
