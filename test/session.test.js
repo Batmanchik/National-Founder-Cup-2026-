@@ -8,7 +8,7 @@ const F = { category: 'focus', label: 'Код' };
 test('напоминание после порога отвлечения и возврат к цели', () => {
   const t0 = 1_000_000;
   const s = new Session({ goal: 'код', minutes: 25, now: t0 });
-  let events = [];
+  const events = [];
   let t = t0;
   for (let i = 0; i < DRIFT_NUDGE_SEC / 2; i++) events.push(...s.record(D, 2, (t += 2000)));
   assert.deepStrictEqual(events, ['drift']);
@@ -47,7 +47,7 @@ test('бездействие на ленте считается «не за ко
   const s = new Session({ goal: 'код', minutes: 25, now: 0 });
   const away = applyIdle(D, IDLE_SEC + 1);
   assert.strictEqual(away.category, 'away');
-  let events = [];
+  const events = [];
   for (let i = 1; i <= 30; i++) events.push(...s.record(away, 2, i * 2000));
   assert.deepStrictEqual(events, []);
   assert.strictEqual(s.totals.away, 60);
@@ -138,7 +138,10 @@ test('время в ленте перерыв не зарабатывает', ()
 
 test('после 50 мин фокуса Акыл сам предлагает перерыв', () => {
   const s = new Session({ goal: 'код', minutes: 120, now: 0 });
-  let ev = [];
+  const ev = [];
   for (let t = 1; t <= 51; t++) ev.push(...s.record(F, 60, t * 60_000));
-  assert.deepStrictEqual(ev.filter((e) => e === 'break-due'), ['break-due']);
+  assert.deepStrictEqual(
+    ev.filter((e) => e === 'break-due'),
+    ['break-due']
+  );
 });

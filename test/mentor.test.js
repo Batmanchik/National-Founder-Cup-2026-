@@ -1,10 +1,10 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const mentor = require('../src/main/mentor');
+const lines = require('../src/main/lines');
 const { memoryOf } = require('../src/main/store');
 const { windowKeyword } = require('../src/main/classifier');
 
-const DAY = 86400000;
 const now = new Date(2026, 10, 12, 15).getTime();
 const sess = (daysAgo, focusScore, thieves, hour = 15) => {
   const t = new Date(2026, 10, 12 - daysAgo, hour).getTime();
@@ -15,7 +15,10 @@ test('память: средний фокус и главные воры нед�
   const m = memoryOf(
     [
       sess(0, 60, [{ label: 'Instagram', sec: 300 }]),
-      sess(1, 80, [{ label: 'Instagram', sec: 200 }, { label: 'Игры', sec: 100 }]),
+      sess(1, 80, [
+        { label: 'Instagram', sec: 200 },
+        { label: 'Игры', sec: 100 },
+      ]),
       sess(9, 100, [{ label: 'Сериалы', sec: 900 }]),
     ],
     now
@@ -49,25 +52,33 @@ test('офлайн-чат: сколько осталось и сравнение
 });
 
 test('повторное отвлечение получает другую реплику', () => {
-  const line = mentor.driftLine({ goal: 'g', label: 'Instagram', nudges: 3, memory: null });
+  const line = lines.driftLine({ goal: 'g', label: 'Instagram', nudges: 3, memory: null });
   assert.match(line, /3-й раз/);
 });
 
 test('старт сессии вспоминает главного вора недели', () => {
   const mem = { topThieves: [{ label: 'Instagram', sec: 600 }], last: null };
-  assert.match(mentor.startLine('курсовая', mem), /Instagram/);
-  assert.doesNotMatch(mentor.startLine('курсовая', null), /undefined/);
+  assert.match(lines.startLine('курсовая', mem), /Instagram/);
+  assert.doesNotMatch(lines.startLine('курсовая', null), /undefined/);
 });
 
 test('вывод без ИИ сравнивает со средним и замечает привычного вора', () => {
   const summary = { focusScore: 90, topDistractors: [{ label: 'Instagram', sec: 120 }] };
-  const text = mentor.offlineInsight(summary, { sessions: 4, avgFocus: 70, topThieves: [{ label: 'Instagram', sec: 900 }], bestTime: null });
+  const text = mentor.offlineInsight(summary, {
+    sessions: 4,
+    avgFocus: 70,
+    topThieves: [{ label: 'Instagram', sec: 900 }],
+    bestTime: null,
+  });
   assert.match(text, /выше твоего среднего/);
   assert.match(text, /не первый раз/);
 });
 
 test('ключ окна для запоминания', () => {
-  assert.strictEqual(windowKeyword({ app: 'chrome', title: 'Лекция по физике: механика - YouTube - Google Chrome' }), 'Лекция по физике: механика');
+  assert.strictEqual(
+    windowKeyword({ app: 'chrome', title: 'Лекция по физике: механика - YouTube - Google Chrome' }),
+    'Лекция по физике: механика'
+  );
   assert.strictEqual(windowKeyword({ app: 'chrome', title: 'Механика - YouTube', url: 'https://www.youtube.com/watch?v=1' }), 'Механика');
   assert.strictEqual(windowKeyword({ app: 'chrome', title: '', url: 'https://www.khanacademy.org/math' }), 'khanacademy.org');
   assert.strictEqual(windowKeyword({ app: 'Telegram', title: '' }), 'Telegram');

@@ -9,10 +9,12 @@ const { Session, applyIdle } = require('./session');
 const { Store } = require('./store');
 const { SettingsStore } = require('./settings');
 const mentor = require('./mentor');
+const lines = require('./lines');
+const { fmtMin, minutes: minutesText, minutesAcc } = require('../shared/util');
 const voice = require('./voice');
 const { makeTrayIcon } = require('./icon');
-const { writeJsonAtomic, readJsonSafe } = require('../shared/fsutil');
-const fs = require('fs');
+const { LockFile } = require('./lock-file');
+const { trayMenuTemplate } = require('./tray-menu');
 
 const TICK_MS = 2000;
 const HIDDEN_START = process.argv.includes('--hidden'); // автозапуск при входе в Windows: без окна управления
@@ -31,8 +33,7 @@ let settings = null;
 let session = null;
 let quitting = false;
 let systemQuitting = false; // выключение или перезагрузка Windows: блокировка не мешает
-let activeFile = null; // снимок заблокированной сессии на случай, если Nazar убьют
-let lastPersist = 0;
+let lockFile = null; // снимок заблокированной сессии на случай, если Nazar убьют
 let restoredKind = null; // 'killed' — Nazar убили; 'reboot' — выключался компьютер
 let visionEnabled = false;
 let lastVision = null; // { on_task, activity, confidence, comment, at, key }
@@ -55,17 +56,8 @@ const say = (text, opts = {}) => send('buddy-say', { text, ...opts });
 // Выключение компьютера блокировка не держит: сессия сохранится и продолжится после включения.
 const locked = () => Boolean(session && session.isLocked() && !systemQuitting);
 
-function persistActive(force = false) {
-  if (!activeFile) return;
-  if (!session || !session.strict || session.surrendered) return clearActive();
-  if (!force && Date.now() - lastPersist < 10000) return;
-  lastPersist = Date.now();
-  try {
-    writeJsonAtomic(activeFile, session.snapshot());
-  } catch (err) {
-    console.error('[lock]', err.message);
-  }
-}
+const persistActive = (force = false) => lockFile && lockFile.save(session, force);
+const clearActive = () => lockFile && lockFile.clear();
 
 // Компьютер выключается: это не попытка сбежать, сессия продолжится после включения.
 function markSystemShutdown() {
@@ -74,21 +66,11 @@ function markSystemShutdown() {
   persistActive(true);
 }
 
-// Удаляем синхронно: иначе при быстром выходе файл может остаться, и сессия «воскреснет» при следующем запуске.
-function clearActive() {
-  if (!activeFile) return;
-  try {
-    fs.rmSync(activeFile, { force: true });
-  } catch (err) {
-    console.error('[lock]', err.message);
-  }
-}
-
 // Попытка выключить во время блокировки: Акыл бежит к центру и ругается, чем дальше — тем злее.
 function blockAttempt() {
   session.shutdownAttempts += 1;
   persistActive(true);
-  const text = mentor.blockLine({ n: session.shutdownAttempts, goal: session.goal, leftSec: session.lockLeftSec() });
+  const text = lines.blockLine({ n: session.shutdownAttempts, goal: session.goal, leftSec: session.lockLeftSec() });
   say(text, { mood: 'worried', action: 'blocked' });
   notifyPanel();
   return text;
@@ -98,7 +80,7 @@ function surrender() {
   if (!session) return null;
   session.surrendered = true;
   clearActive();
-  say(mentor.line('surrender'), { mood: 'normal' });
+  say(lines.line('surrender'), { mood: 'normal' });
   setTimeout(endSession, 1500);
   return true;
 }
@@ -315,7 +297,11 @@ function chatContext() {
 function handleEvent(ev, w, v) {
   const vars = { goal: session.goal, label: v.label };
   if (ev === 'drift')
-    say(mentor.driftLine({ ...vars, nudges: session.nudges, memory: store.memory() }), { mood: 'worried', action: 'run', quick: DRIFT_QUICK });
+    say(lines.driftLine({ ...vars, nudges: session.nudges, memory: store.memory() }), {
+      mood: 'worried',
+      action: 'run',
+      quick: DRIFT_QUICK,
+    });
   if (ev === 'drift-long') {
     if (lastVision && lastVision.comment) say(lastVision.comment, { mood: 'worried', action: 'run', quick: DRIFT_QUICK });
     else {
@@ -323,22 +309,22 @@ function handleEvent(ev, w, v) {
       const current = session;
       mentor.nudge(chatContext()).then((text) => {
         if (session !== current || !session.longNotified) return; // человек уже вернулся
-        say(text || mentor.line('driftLong', vars), { mood: 'worried', action: 'run', quick: DRIFT_QUICK });
+        say(text || lines.line('driftLong', vars), { mood: 'worried', action: 'run', quick: DRIFT_QUICK });
       });
     }
   }
   if (ev === 'break-due') {
     const m = session.earnedBreak();
-    say(mentor.line('breakDue', { work: mentor.minutesWord(Math.round(session.focusSinceBreak / 60)).replace('минуту', 'минута'), m: mentor.minutesWord(m) }), {
+    say(lines.line('breakDue', { work: minutesText(Math.round(session.focusSinceBreak / 60)), m: minutesAcc(m) }), {
       mood: 'happy',
       quick: [`☕ Перерыв ${m} мин`, '💪 Ещё поработаю'],
     });
   }
-  if (ev === 'back') say(mentor.line('back', vars), { mood: 'happy', action: 'jump' });
-  if (ev === 'break-over') say(mentor.line('breakOver', vars), { mood: 'normal', action: 'wake' });
+  if (ev === 'back') say(lines.line('back', vars), { mood: 'happy', action: 'jump' });
+  if (ev === 'break-over') say(lines.line('breakOver', vars), { mood: 'normal', action: 'wake' });
   if (ev === 'time-up') {
-    const unlocked = session.strict && !session.surrendered ? ` ${mentor.line('unlocked')}` : '';
-    say(mentor.line('timeUp', vars) + unlocked, { mood: 'happy', action: 'jump', quick: ['✅ Завершить', '➕ Ещё 15 минут'] });
+    const unlocked = session.strict && !session.surrendered ? ` ${lines.line('unlocked')}` : '';
+    say(lines.line('timeUp', vars) + unlocked, { mood: 'happy', action: 'jump', quick: ['✅ Завершить', '➕ Ещё 15 минут'] });
     buildTrayMenu();
     notifyPanel();
   }
@@ -384,7 +370,7 @@ function startSession({ goal, minutes, vision, strict }) {
   persistActive(true);
   chatHistory = [];
   lastVision = null;
-  say(mentor.startLine(session.goal, store.memory()), { mood: 'happy', action: 'jump' });
+  say(lines.startLine(session.goal, store.memory()), { mood: 'happy', action: 'jump' });
   buildTrayMenu();
   notifyPanel();
   return liveState();
@@ -394,7 +380,7 @@ function endSession() {
   if (!session) return null;
   if (locked()) {
     // Досрочно завершить нельзя — только сдаться.
-    say(mentor.line('endEarly', { left: mentor.fmtMin(session.lockLeftSec()) }), { mood: 'worried', action: 'blocked' });
+    say(lines.line('endEarly', { left: fmtMin(session.lockLeftSec()) }), { mood: 'worried', action: 'blocked' });
     return null;
   }
   clearActive();
@@ -412,7 +398,9 @@ function endSession() {
 
 // «Это по работе» / «это отвлечение»: Акыл дописывает окно в нужный список настроек и больше не путает.
 function rememberWindow(kind, keyword) {
-  const word = String(keyword || windowKeyword(lastExternal)).trim().slice(0, 80);
+  const word = String(keyword || windowKeyword(lastExternal))
+    .trim()
+    .slice(0, 80);
   if (!word) return '';
   const key = word.toLowerCase();
   const without = (list) => list.filter((x) => x.toLowerCase() !== key);
@@ -432,7 +420,10 @@ function applyAction(res) {
     const kind = res.action === 'mark_focus' ? 'focus' : 'distraction';
     const word = rememberWindow(kind, res.keyword);
     if (kind === 'focus' && session) session.forgiveDrift();
-    if (!res.reply) res.reply = word ? mentor.line(kind === 'focus' ? 'marked' : 'markedDistraction', { keyword: word }) : 'Не понял, какое окно запомнить. Открой его и напиши ещё раз.';
+    if (!res.reply)
+      res.reply = word
+        ? lines.line(kind === 'focus' ? 'marked' : 'markedDistraction', { keyword: word })
+        : 'Не понял, какое окно запомнить. Открой его и напиши ещё раз.';
     return;
   }
   if (!session) {
@@ -442,54 +433,43 @@ function applyAction(res) {
   if (res.action === 'break') {
     // Перерыв выдаётся по заработанному фокусу, а не по просьбе (см. session.js); ответ Акыла объясняет почему.
     const r = session.grantBreak(res.minutes);
-    const vars = { goal: session.goal, work: mentor.minutesWord(r.focusMin).replace('минуту', 'минута'), m: mentor.minutesWord(r.minutes), asked: mentor.minutesWord(r.requested) };
+    const vars = { goal: session.goal, work: minutesText(r.focusMin), m: minutesAcc(r.minutes), asked: minutesAcc(r.requested) };
     if (r.refused) {
       res.action = 'none';
-      res.reply = mentor.line('breakEarly', { ...vars, need: Math.max(1, r.needMin) });
+      res.reply = lines.line('breakEarly', { ...vars, need: Math.max(1, r.needMin) });
       return;
     }
     res.minutes = r.minutes;
-    res.reply = mentor.line(r.requested > r.minutes ? 'breakCut' : 'breakOk', vars);
+    res.reply = lines.line(r.requested > r.minutes ? 'breakCut' : 'breakOk', vars);
     send('buddy-say', { text: '', mood: 'sleep', action: 'sleep', silent: true, breakMin: r.minutes });
   } else if (res.action === 'extend') {
     session.extend(res.minutes || 15);
   } else if (res.action === 'end_session') {
-    if (locked()) res.reply = mentor.line('endEarly', { left: mentor.fmtMin(session.lockLeftSec()) });
+    if (locked()) res.reply = lines.line('endEarly', { left: fmtMin(session.lockLeftSec()) });
     else setTimeout(endSession, 1200);
   }
 }
 
 function buildTrayMenu() {
   if (!tray) return;
-  const on = mentorOn();
-  const lock = locked();
-  tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: 'Открыть Nazar', click: openPanel },
-      { label: lock ? '🔒 Выключить Акыла (заблокировано)' : on ? 'Выключить Акыла' : 'Включить Акыла', click: toggleMentor },
-      { type: 'separator' },
-      { label: session ? `🎯 ${session.goal}` : 'Нет активной сессии', enabled: false },
-      { label: 'Новая сессия…', enabled: on && !lock, click: () => send('open-onboarding') },
-      { label: lock ? '🔒 Завершить сессию (только после таймера)' : 'Завершить сессию и показать чек', enabled: Boolean(session), click: endSession },
-      ...(lock ? [{ label: '🏳 Сдаться досрочно…', click: openPanel }] : []),
-      { label: 'Чат с Акылом  (Ctrl+Shift+Space)', enabled: on, click: () => openChat() },
-      { type: 'separator' },
-      {
-        label: 'Зрение: анализ экрана ИИ',
-        type: 'checkbox',
-        checked: visionEnabled,
-        enabled: mentor.hasAI(),
-        click: (item) => {
-          visionEnabled = item.checked;
-          send('state', liveState());
-        },
+  const template = trayMenuTemplate(
+    { mentorOn: mentorOn(), locked: locked(), goal: session ? session.goal : null, vision: visionEnabled, ai: mentor.hasAI() },
+    {
+      openPanel,
+      toggleMentor,
+      newSession: () => send('open-onboarding'),
+      endSession,
+      openChat,
+      setVision: (on) => {
+        visionEnabled = on;
+        send('state', liveState());
       },
-      { label: 'Демо: отвлечение на Reels  (Ctrl+Shift+9)', enabled: on, click: () => demo.distract() },
-      { label: 'Демо: работа в VS Code  (Ctrl+Shift+0)', enabled: on, click: () => demo.work() },
-      { type: 'separator' },
-      { label: lock ? '🔒 Выход (после сессии)' : 'Выход', click: () => app.quit() },
-    ])
+      demoDistract: () => demo.distract(),
+      demoWork: () => demo.work(),
+      quit: () => app.quit(),
+    }
   );
+  tray.setContextMenu(Menu.buildFromTemplate(template));
 }
 
 // Демо-режим для защиты: подменяет активное окно на 40 секунд (на случай, если трекинг ОС недоступен).
@@ -536,7 +516,7 @@ ipcMain.handle('set-vision', (_e, on) => {
 ipcMain.handle('chat', async (_e, text) => {
   const t = String(text).toLowerCase();
   if (locked() && /сда[её]?юсь|сдаюс|берілемін/.test(t) && !/не\s+сда/.test(t)) {
-    const reply = mentor.line('surrender');
+    const reply = lines.line('surrender');
     surrender();
     return { reply, action: 'end_session', minutes: 0, ai: false };
   }
@@ -555,7 +535,12 @@ ipcMain.handle('panel-toggle', () => {
 // Сдаться можно, только вписав «я сдаюсь»: так выход есть всегда, но он осознанный.
 ipcMain.handle('panel-surrender', (_e, phrase) => {
   if (!locked()) return { ok: false, error: 'Сессия не заблокирована', state: panelState() };
-  const norm = String(phrase || '').toLowerCase().replace(/ё/g, 'е').replace(/[^\p{L}\s]/gu, '').replace(/\s+/g, ' ').trim();
+  const norm = String(phrase || '')
+    .toLowerCase()
+    .replace(/ё/g, 'е')
+    .replace(/[^\p{L}\s]/gu, '')
+    .replace(/\s+/g, ' ')
+    .trim();
   if (norm !== 'я сдаюсь') return { ok: false, error: 'Впиши ровно: я сдаюсь', state: panelState() };
   surrender();
   return { ok: true, state: panelState() };
@@ -609,16 +594,16 @@ app.whenReady().then(() => {
   tray.on('click', openPanel);
   applySettings();
   powerMonitor.on('shutdown', markSystemShutdown);
-  activeFile = path.join(app.getPath('userData'), 'nazar-active.json');
+  lockFile = new LockFile(path.join(app.getPath('userData'), 'nazar-active.json'));
   const restored = restoreActive();
   if (restored || settings.data.startMentorOnOpen || HIDDEN_START) startMentor();
   if (restored) {
     // Nazar убили посреди заблокированной сессии: продолжаем и высказываем всё, что думаем.
     setTimeout(() => {
       if (!session) return;
-      const vars = { goal: session.goal, left: mentor.fmtMin(session.lockLeftSec()) };
-      if (restoredKind === 'killed') say(mentor.line('killed', vars), { mood: 'worried', action: 'blocked' });
-      else say(mentor.line('resumed', vars), { mood: 'normal', action: 'jump' });
+      const vars = { goal: session.goal, left: fmtMin(session.lockLeftSec()) };
+      if (restoredKind === 'killed') say(lines.line('killed', vars), { mood: 'worried', action: 'blocked' });
+      else say(lines.line('resumed', vars), { mood: 'normal', action: 'jump' });
     }, 5000);
   }
   if (!HIDDEN_START) openPanel();
@@ -627,7 +612,7 @@ app.whenReady().then(() => {
 
 // Снимок заблокированной сессии остался — значит, Nazar закрыли не по-честному (или выключился компьютер).
 function restoreActive() {
-  const snap = readJsonSafe(activeFile);
+  const snap = lockFile.load();
   if (!snap || !snap.startedAt) return false;
   const restoredSession = Session.restore(snap);
   if (restoredSession.isLocked()) {

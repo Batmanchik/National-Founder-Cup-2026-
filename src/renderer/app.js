@@ -1,9 +1,9 @@
 // Интерфейс: связывает Акыла, облачко, панели и события из главного процесса.
-/* global Buddy */
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
   const api = window.nazar;
+  const { pick, fmtMin, fmtClock, times } = NazarUtil;
 
   const buddyEl = $('buddy');
   const buddy = new Buddy(buddyEl, $('buddy-canvas'));
@@ -72,7 +72,6 @@
   });
 
   // ---------- Облачко ----------
-  const pick = (a) => a[Math.floor(Math.random() * a.length)];
 
   function placeBubble(x, y) {
     if (bubble.hidden) return;
@@ -212,7 +211,8 @@
   function scoldLine() {
     const goal = (state && state.session && state.session.goal) || 'цель';
     let line;
-    do line = pick(SCOLD); while (line === lastScold && SCOLD.length > 1);
+    do line = pick(SCOLD);
+    while (line === lastScold && SCOLD.length > 1);
     lastScold = line;
     return line.replace('{goal}', goal).replace('{label}', scoldLabel);
   }
@@ -284,15 +284,6 @@
   }
   api.on('buddy-say', react);
 
-  const fmt = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
-  // «1 раз», «2 раза», «5 раз»
-  const times = (n) => {
-    const d = n % 10;
-    const dd = n % 100;
-    return `${n} ${d >= 2 && d <= 4 && (dd < 12 || dd > 14) ? 'раза' : 'раз'}`;
-  };
-  const fmtMin = (sec) => (sec < 60 ? `${Math.round(sec)} сек` : `${Math.round(sec / 60)} мин`);
-
   function renderHud(s) {
     const hud = $('hud');
     if (!s || !s.session) {
@@ -301,7 +292,7 @@
     }
     const l = s.session;
     hud.hidden = false;
-    $('hud-timer').textContent = l.onBreak ? `☕ ${fmt(l.breakLeftSec)}` : fmt(l.remainingSec);
+    $('hud-timer').textContent = l.onBreak ? `☕ ${fmtClock(l.breakLeftSec)}` : fmtClock(l.remainingSec);
     const sc = $('hud-score');
     sc.textContent = `${l.focusScore}%`;
     sc.className = `score ${l.focusScore < 50 ? 'low' : l.focusScore < 80 ? 'mid' : ''}`;
@@ -381,10 +372,10 @@
     $('vision').disabled = !(state && state.ai);
     $('vision').checked = Boolean(state && state.vision);
     $('strict').checked = Boolean(state && state.strictDefault);
-    $('ai-hint').textContent = state && state.ai
-      ? `ИИ: ${state.model}`
-      : 'Офлайн-режим: добавь ANTHROPIC_API_KEY в .env, чтобы включить ИИ-чат и зрение.';
-    if (state && !state.trackingSupported) $('ai-hint').textContent += ' Отслеживание окон недоступно на этой системе — используй демо-режим в трее.';
+    $('ai-hint').textContent =
+      state && state.ai ? `ИИ: ${state.model}` : 'Офлайн-режим: добавь ANTHROPIC_API_KEY в .env, чтобы включить ИИ-чат и зрение.';
+    if (state && !state.trackingSupported)
+      $('ai-hint').textContent += ' Отслеживание окон недоступно на этой системе — используй демо-режим в трее.';
     setTimeout(() => $('goal').focus(), 50);
   }
   $('minutes').addEventListener('click', (e) => {
@@ -402,7 +393,8 @@
     }
     panels.onboarding.hidden = true;
     state = await api.startSession({ goal, minutes, vision: $('vision').checked, strict: $('strict').checked });
-    if (state.session && state.session.locked) say(`🔒 Блокировка включена: до конца сессии меня не выключить. Сдаться можно только словами «я сдаюсь».`, { ms: 6000 });
+    if (state.session && state.session.locked)
+      say(`🔒 Блокировка включена: до конца сессии меня не выключить. Сдаться можно только словами «я сдаюсь».`, { ms: 6000 });
     $('chat-log').innerHTML = '';
     renderHud(state);
   }
@@ -435,7 +427,8 @@
     if (!c.hidden) {
       bubble.hidden = true;
       placeChat(buddy.x, buddy.y);
-      if (!$('chat-log').children.length) addMsg('bot', `Я тут! Цель: «${state.session.goal}». Можешь попросить перерыв, спросить, как дела, или просто поболтать.`);
+      if (!$('chat-log').children.length)
+        addMsg('bot', `Я тут! Цель: «${state.session.goal}». Можешь попросить перерыв, спросить, как дела, или просто поболтать.`);
       setTimeout(() => $('chat-input').focus(), 50);
     }
   }
@@ -504,7 +497,9 @@
     $('r-away').textContent = fmtMin(away);
     $('r-nudges').textContent = times(s.nudges);
     $('r-returns').textContent = times(s.returns);
-    $('r-thieves').textContent = s.topDistractors.length ? s.topDistractors.map((d) => `${d.label} ${fmtMin(d.sec)}`).join(', ') : 'не нашлось 💪';
+    $('r-thieves').textContent = s.topDistractors.length
+      ? s.topDistractors.map((d) => `${d.label} ${fmtMin(d.sec)}`).join(', ')
+      : 'не нашлось 💪';
     $('r-xp').textContent = `+${s.xpEarned} (всего ${p.xp})`;
     $('r-level').textContent = `${p.level} · серия ${p.streak} дн.`;
     $('r-insight').textContent = 'думаю…';

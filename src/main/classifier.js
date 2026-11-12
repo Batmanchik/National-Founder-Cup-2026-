@@ -13,9 +13,15 @@ const DISTRACTION = [
 ];
 
 const FOCUS = [
-  { re: /visual studio|vs ?code|\bcode\b|cursor|intellij|pycharm|webstorm|android studio|xcode|sublime|\bvim\b|terminal|iterm|powershell|cmd\.exe|windowsterminal|konsole/i, label: 'Код' },
+  {
+    re: /visual studio|vs ?code|\bcode\b|cursor|intellij|pycharm|webstorm|android studio|xcode|sublime|\bvim\b|terminal|iterm|powershell|cmd\.exe|windowsterminal|konsole/i,
+    label: 'Код',
+  },
   { re: /figma|canva|photoshop|illustrator|blender/i, label: 'Дизайн' },
-  { re: /\bword\b|winword|excel|powerpnt|powerpoint|google docs|документы google|google sheets|таблицы google|google slides|презентации google|notion|obsidian|onenote|keynote|libreoffice/i, label: 'Документы' },
+  {
+    re: /\bword\b|winword|excel|powerpnt|powerpoint|google docs|документы google|google sheets|таблицы google|google slides|презентации google|notion|obsidian|onenote|keynote|libreoffice/i,
+    label: 'Документы',
+  },
   { re: /github|gitlab|stack ?overflow|developer\.mozilla|documentation|leetcode|codeforces/i, label: 'Разработка' },
   { re: /zoom|microsoft teams|google meet|meet\.google/i, label: 'Созвон' },
   { re: /chatgpt|claude|gemini|perplexity/i, label: 'ИИ-ассистент' },
@@ -32,11 +38,53 @@ const SELF = /electron|nazar/i;
 // Общие слова цели («сделать», «написать», «работа») не говорят о содержании окна и дают ложный фокус.
 const GOAL_STOP = new Set(
   [
-    'сделать', 'доделать', 'написать', 'дописать', 'закончить', 'начать', 'подготовить', 'подготовиться',
-    'прочитать', 'дочитать', 'выучить', 'учить', 'изучить', 'повторить', 'решить', 'работа', 'работать',
-    'поработать', 'задача', 'задачи', 'задание', 'минут', 'минуты', 'часов', 'сегодня', 'завтра', 'нужно',
-    'надо', 'хочу', 'своей', 'свою', 'свой', 'новый', 'новую', 'немного', 'finish', 'write', 'make', 'work',
-    'study', 'learn', 'read', 'start', 'with', 'this', 'that', 'today',
+    'сделать',
+    'доделать',
+    'написать',
+    'дописать',
+    'закончить',
+    'начать',
+    'подготовить',
+    'подготовиться',
+    'прочитать',
+    'дочитать',
+    'выучить',
+    'учить',
+    'изучить',
+    'повторить',
+    'решить',
+    'работа',
+    'работать',
+    'поработать',
+    'задача',
+    'задачи',
+    'задание',
+    'минут',
+    'минуты',
+    'часов',
+    'сегодня',
+    'завтра',
+    'нужно',
+    'надо',
+    'хочу',
+    'своей',
+    'свою',
+    'свой',
+    'новый',
+    'новую',
+    'немного',
+    'finish',
+    'write',
+    'make',
+    'work',
+    'study',
+    'learn',
+    'read',
+    'start',
+    'with',
+    'this',
+    'that',
+    'today',
   ].map((w) => w.slice(0, Math.max(4, w.length - 2)))
 );
 
@@ -97,8 +145,13 @@ const BROWSER_SUFFIX = /\s[-—–|]\s(google chrome|mozilla firefox|microsoft e
 // если заголовка нет — домен, иначе приложение.
 function windowKeyword(win) {
   if (!win) return '';
-  const title = String(win.title || '').replace(BROWSER_SUFFIX, '').trim();
-  const parts = title.split(/\s[-—–|•]\s/).map((p) => p.trim()).filter(Boolean);
+  const title = String(win.title || '')
+    .replace(BROWSER_SUFFIX, '')
+    .trim();
+  const parts = title
+    .split(/\s[-—–|•]\s/)
+    .map((p) => p.trim())
+    .filter(Boolean);
   const page = parts.length > 1 ? parts[0] : title;
   if (page && page.length >= 3) return page.slice(0, 60);
   if (win.url) {

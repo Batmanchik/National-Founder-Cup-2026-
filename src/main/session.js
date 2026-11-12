@@ -1,5 +1,6 @@
 // Фокус-сессия: копит время по категориям и решает, когда ментору реагировать.
 // Чистая логика без Electron — её покрывают тесты в test/session.test.js.
+const { clamp } = require('../shared/util');
 
 const DRIFT_NUDGE_SEC = Number(process.env.NAZAR_DRIFT_SEC) || 20; // через сколько секунд отвлечения ментор вмешивается
 const DRIFT_LONG_SEC = 120; // второе, более настойчивое напоминание
@@ -34,8 +35,6 @@ function earnedBreakMin(focusSec) {
   const cap = focusMin >= LONG_FOCUS_MIN ? MAX_LONG_BREAK : MAX_SHORT_BREAK;
   return Math.min(cap, Math.max(1, Math.round(focusMin / WORK_PER_BREAK_MIN)));
 }
-
-const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(v) || lo)));
 
 class Session {
   constructor({ goal, minutes, driftSec, strict = false, now = Date.now() }) {
@@ -184,7 +183,15 @@ class Session {
     const earned = this.earnedBreak();
     const focusMin = Math.round(this.focusSinceBreak / 60);
     const want = Math.round(Number(requested)) || 0;
-    if (!earned) return { minutes: 0, requested: want, earned, focusMin, refused: true, needMin: MIN_FOCUS_FOR_BREAK - Math.floor(this.focusSinceBreak / 60) };
+    if (!earned)
+      return {
+        minutes: 0,
+        requested: want,
+        earned,
+        focusMin,
+        refused: true,
+        needMin: MIN_FOCUS_FOR_BREAK - Math.floor(this.focusSinceBreak / 60),
+      };
     const minutes = want > 0 ? Math.min(want, earned) : earned;
     this.breakUntil = now + minutes * 60000;
     this.breaks += 1;
@@ -232,8 +239,7 @@ class Session {
         .map(([label, sec]) => ({ label, sec }));
     const score = this.focusScore();
     const elapsedMin = (now - this.startedAt) / 60000;
-    let xpEarned =
-      Math.round(this.totals.focus / 60) + this.returns * 5 + (score >= 80 && elapsedMin >= 10 ? 20 : 0);
+    let xpEarned = Math.round(this.totals.focus / 60) + this.returns * 5 + (score >= 80 && elapsedMin >= 10 ? 20 : 0);
     if (this.surrendered) xpEarned = Math.floor(Math.round(this.totals.focus / 60) / 2); // сдался: половина за минуты, без бонусов
     return {
       id: this.id,

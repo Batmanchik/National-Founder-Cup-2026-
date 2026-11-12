@@ -1,6 +1,6 @@
 {
   "name": "nazar-mentor",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Nazar — пиксельный ИИ-ментор на экране ноутбука, который помогает удерживать цель и показывает честный чек внимания",
   "main": "src/main/main.js",
   "scripts": {
@@ -10,7 +10,10 @@
     "dist": "npm run icons && npm run voice && electron-builder --publish never",
     "dist:win": "npm run icons && npm run voice && electron-builder --win --publish never",
     "install-app": "node scripts/install-windows.js",
-    "voice": "node scripts/fetch-voice.js"
+    "voice": "node scripts/fetch-voice.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "check": "eslint . && prettier --check . && node --test test/*.test.js"
   },
   "license": "MIT",
   "dependencies": {
@@ -19,8 +22,12 @@
     "sherpa-onnx-node": "1.13.8"
   },
   "devDependencies": {
+    "@eslint/js": "9.14.0",
     "electron": "44.9.3",
-    "electron-builder": "26.18.0"
+    "electron-builder": "26.18.0",
+    "eslint": "9.14.0",
+    "globals": "15.12.0",
+    "prettier": "3.3.3"
   },
   "productName": "Nazar",
   "author": {

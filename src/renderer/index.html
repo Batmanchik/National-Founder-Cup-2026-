@@ -2,7 +2,10 @@
 <html lang="ru">
   <head>
     <meta charset="utf-8" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; media-src blob:; script-src 'self'" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; media-src blob:; script-src 'self'"
+    />
     <title>Nazar</title>
     <link rel="stylesheet" href="style.css" />
   </head>
@@ -43,7 +46,9 @@
       </div>
       <label class="toggle" id="vision-row">
         <input type="checkbox" id="vision" />
-        <span>Зрение: раз в ~45 сек ИИ смотрит на скриншот экрана, чтобы точнее понять, работаешь ли ты. Скриншоты нигде не сохраняются.</span>
+        <span
+          >Зрение: раз в ~45 сек ИИ смотрит на скриншот экрана, чтобы точнее понять, работаешь ли ты. Скриншоты нигде не сохраняются.</span
+        >
       </label>
       <label class="toggle">
         <input type="checkbox" id="strict" />
@@ -83,7 +88,10 @@
       <p class="sub" id="r-goal"></p>
       <div class="big-score"><span id="r-score">0</span>%<small>фокуса</small></div>
       <div id="r-timeline" class="timeline" title="Каждый блок — минута сессии"></div>
-      <div class="legend"><i class="focus"></i>по делу <i class="distraction"></i>отвлечение <i class="neutral"></i>нейтрально <i class="break"></i>перерыв <i class="away"></i>не за компьютером</div>
+      <div class="legend">
+        <i class="focus"></i>по делу <i class="distraction"></i>отвлечение <i class="neutral"></i>нейтрально <i class="break"></i>перерыв
+        <i class="away"></i>не за компьютером
+      </div>
       <div class="receipt">
         <div><span>Время сессии</span><b id="r-time"></b></div>
         <div><span>По делу</span><b id="r-focus"></b></div>
@@ -107,6 +115,7 @@
       </div>
     </section>
 
+    <script src="../shared/util.js"></script>
     <script src="../shared/sprites.js"></script>
     <script src="buddy.js"></script>
     <script src="app.js"></script>

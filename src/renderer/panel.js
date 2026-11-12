@@ -1,5 +1,4 @@
 // Окно управления: включение и выключение Акыла, настройки без правки файлов.
-/* global NazarSprites */
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);

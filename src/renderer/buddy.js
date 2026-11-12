@@ -6,7 +6,6 @@
 //  • на перерыве спит; ночью чаще зевает;
 //  • следит глазами за курсором, машет, когда наводишь на него мышь;
 //  • его можно перетащить мышкой (он падает обратно на «пол»).
-/* global NazarSprites */
 (function () {
   'use strict';
   const S = NazarSprites;
@@ -83,11 +82,21 @@
       if (this.mode && this.mode !== 'drag') this.y = this.ground();
     }
 
-    get width() { return this.w; }
-    get height() { return this.h; }
-    ground() { return window.innerHeight - this.h - GROUND_GAP; }
+    get width() {
+      return this.w;
+    }
+    get height() {
+      return this.h;
+    }
+    ground() {
+      return window.innerHeight - this.h - GROUND_GAP;
+    }
 
-    walkTo(x) { this.targetX = this._clampX(x); this.mode = 'walk'; this.act = null; }
+    walkTo(x) {
+      this.targetX = this._clampX(x);
+      this.mode = 'walk';
+      this.act = null;
+    }
     // Бежит к x (например, к центру при отвлечении) и запоминает, где стоял, чтобы потом вернуться.
     runTo(x) {
       if (this.homeX == null && this.mode !== 'run') this.homeX = this.x;
@@ -102,11 +111,26 @@
       this.homeX = null;
       this.walkTo(x);
     }
-    jump() { this.jumpT = 0.45; }
-    sleep() { this.mode = 'sleep'; this.act = null; }
-    wake() { if (this.mode === 'sleep') { this.mode = 'idle'; this.idleUntil = performance.now() + 800; this.jump(); } }
-    talk(ms) { this.talkingUntil = performance.now() + ms; }
-    setMood(m) { this.mood = m; }
+    jump() {
+      this.jumpT = 0.45;
+    }
+    sleep() {
+      this.mode = 'sleep';
+      this.act = null;
+    }
+    wake() {
+      if (this.mode === 'sleep') {
+        this.mode = 'idle';
+        this.idleUntil = performance.now() + 800;
+        this.jump();
+      }
+    }
+    talk(ms) {
+      this.talkingUntil = performance.now() + ms;
+    }
+    setMood(m) {
+      this.mood = m;
+    }
     // Злится, пока человек сидит в ленте: брови домиком, кричит, трясёт кулаками и топает.
     setAngry(on) {
       this.angry = Boolean(on);
@@ -129,15 +153,34 @@
       this.idleUntil = Math.max(this.idleUntil, this.act.until + 500);
       return true;
     }
-    wave() { return this.doAct('wave', 1400); }
-    cheer() { this.jump(); return this.doAct('cheer', 1600); }
-    lookToward(x, y) { this.lookAt = x == null ? null : { x, y }; }
+    wave() {
+      return this.doAct('wave', 1400);
+    }
+    cheer() {
+      this.jump();
+      return this.doAct('cheer', 1600);
+    }
+    lookToward(x, y) {
+      this.lookAt = x == null ? null : { x, y };
+    }
 
-    startDrag() { this.mode = 'drag'; this.act = null; }
-    dragTo(x, y) { this.x = this._clampX(x); this.y = Math.min(this.ground(), Math.max(0, y)); }
-    drop() { this.mode = 'fall'; this.vy = 0; this.homeX = null; }
+    startDrag() {
+      this.mode = 'drag';
+      this.act = null;
+    }
+    dragTo(x, y) {
+      this.x = this._clampX(x);
+      this.y = Math.min(this.ground(), Math.max(0, y));
+    }
+    drop() {
+      this.mode = 'fall';
+      this.vy = 0;
+      this.homeX = null;
+    }
 
-    _clampX(x) { return Math.max(4, Math.min(window.innerWidth - this.w - 4, x)); }
+    _clampX(x) {
+      return Math.max(4, Math.min(window.innerWidth - this.w - 4, x));
+    }
 
     _pickWanderTarget() {
       const span = Math.min(420, window.innerWidth / 2);
@@ -162,7 +205,7 @@
         ['yawn', 1800, isNight() ? 3 : 0.5],
         ['wander', 0, 3],
       ];
-      let total = options.reduce((s, o) => s + o[2], 0);
+      const total = options.reduce((s, o) => s + o[2], 0);
       let r = Math.random() * total;
       for (const [name, ms, weight] of options) {
         if ((r -= weight) > 0) continue;
@@ -206,7 +249,8 @@
           if (this.act) break;
           // Во время фокуса не гуляет: стоит там, где его оставили.
           if (now > this.nextAct) this._chooseAct(now);
-          else if (now > this.idleUntil && this.context === 'none' && this.mood !== 'worried' && Math.random() < 0.002) this._pickWanderTarget();
+          else if (now > this.idleUntil && this.context === 'none' && this.mood !== 'worried' && Math.random() < 0.002)
+            this._pickWanderTarget();
           break;
         case 'fall':
           this.vy += 2200 * dt;

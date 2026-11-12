@@ -1,0 +1,6 @@
+dist/
+node_modules/
+voice/
+build/
+package-lock.json
+*.md

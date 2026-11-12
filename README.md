@@ -247,15 +247,41 @@ npm start
 
 ```
 src/
-  main/       main.js (окно, трей, цикл), activity.js, classifier.js, session.js, store.js, settings.js, mentor.js, icon.js
-  preload.js  безопасный мост IPC
-  renderer/   index.html, style.css, buddy.js (анимация), app.js (интерфейс), fonts/
-  shared/     sprites.js (пиксель-арт Акыла), fsutil.js (надёжная запись JSON)
-scripts/      make-icon.js (иконка из спрайта), install-windows.js (запасная установка из исходников)
-build/        иконки для установщика
-.github/      release.yml: сборка установщиков и релиз по тегу
-test/         тесты классификатора, сессии, памяти и ментора, хранилища, настроек и спрайтов
+  main/                 главный процесс Electron (Node)
+    main.js             окна, жизненный цикл, IPC, цикл каждые 2 с — «клей» между модулями
+    session.js          фокус-сессия: учёт времени, события, перерывы, блокировка (чистая логика)
+    classifier.js       правила «работа / отвлечение / нейтрально» по окну
+    activity.js         активное окно: PowerShell (Windows), AppleScript (macOS), xdotool (Linux)
+    mentor.js           ИИ: Claude API, офлайн-чат, выводы по сессии
+    lines.js            реплики Акыла и сборка фраз из шаблонов
+    voice.js            нейросетевой голос (Piper через sherpa-onnx)
+    store.js            история, опыт, память о прошлых сессиях
+    settings.js         настройки и зашифрованный ключ API
+    lock-file.js        снимок заблокированной сессии на диске
+    tray-menu.js        меню трея (чистая функция)
+    icon.js             иконка трея из спрайта
+  renderer/             окна интерфейса (браузер, без фреймворков)
+    app.js, buddy.js    Акыл на экране: облачко, чат, чек, анимации
+    panel.js            окно управления Nazar
+  shared/               общий код для Node и браузера
+    util.js             clamp, склонения, форматы времени, шаблоны
+    sprites.js          пиксель-арт Акыла 24×30: слои + автоматический контур
+    raster.js           спрайт → пиксельный буфер (иконки)
+    fsutil.js           надёжная запись JSON
+  preload.js, panel-preload.js   безопасные мосты IPC
+scripts/                make-icon.js, fetch-voice.js, install-windows.js
+test/                   node:test — логика без Electron
+.github/workflows/      release.yml: линтер, тесты, сборка установщиков, релиз
 ```
+
+## Правила кода
+
+- **Проверка перед коммитом:** `npm run check` — ESLint, Prettier и все тесты. Те же проверки идут в GitHub Actions перед сборкой.
+- **Форматирование не обсуждаем:** `npm run format` (Prettier, ширина строки 140, одинарные кавычки).
+- **Логика отдельно от Electron.** Всё, что можно посчитать без окон (сессия, классификатор, перерывы, реплики, меню трея, хранилище), живёт в модулях без `require('electron')` и покрыто тестами. `main.js` только связывает модули.
+- **Не копировать helpers.** Нужна функция в двух местах — она идёт в `src/shared/util.js`.
+- **Тексты отдельно от кода.** Новые реплики — в `src/main/lines.js`, шаблоны с `{goal}`, `{label}`.
+- **Новая поза Акыла** — функция-слой в `PARTS` в `src/shared/sprites.js`; контур дорисуется сам, тест проверит размеры и палитру.
 
 ## Команда
 

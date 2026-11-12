@@ -2,6 +2,7 @@
 // Шифрование передаётся снаружи (safeStorage), поэтому логику можно тестировать без Electron.
 const path = require('path');
 const { writeJsonAtomic, readJsonSafe } = require('../shared/fsutil');
+const { clamp } = require('../shared/util');
 
 const MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'];
 
@@ -30,11 +31,6 @@ const LIST_LIMITS = {
   backLines: { items: 20, chars: 160 },
 };
 
-function clampInt(value, lo, hi, fallback) {
-  const n = Math.round(Number(value));
-  return Number.isFinite(n) ? Math.min(hi, Math.max(lo, n)) : fallback;
-}
-
 function cleanList(value, { items, chars }) {
   const raw = Array.isArray(value) ? value : String(value ?? '').split(/\r?\n/);
   const seen = new Set();
@@ -55,10 +51,10 @@ function normalize(input = {}, base = DEFAULTS) {
   const s = { ...base, ...input };
   const out = {
     buddySize: BUDDY_SIZES.includes(s.buddySize) ? s.buddySize : base.buddySize,
-    driftSec: clampInt(s.driftSec, 5, 300, base.driftSec),
+    driftSec: clamp(s.driftSec, 5, 300, base.driftSec),
     model: MODELS.includes(s.model) ? s.model : base.model,
     vision: Boolean(s.vision),
-    visionIntervalSec: clampInt(s.visionIntervalSec, 15, 600, base.visionIntervalSec),
+    visionIntervalSec: clamp(s.visionIntervalSec, 15, 600, base.visionIntervalSec),
     startMentorOnOpen: Boolean(s.startMentorOnOpen),
     autoStart: Boolean(s.autoStart),
     strictMode: Boolean(s.strictMode),

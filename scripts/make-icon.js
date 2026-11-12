@@ -4,33 +4,11 @@ const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
 const S = require('../src/shared/sprites');
-
-function hexToRgb(hex) {
-  const n = parseInt(hex.slice(1), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
+const { rasterize } = require('../src/shared/raster');
 
 // Квадратный PNG size×size из спрайта Акыла.
 function makePng(size = 256) {
-  const scale = Math.floor(size / Math.max(S.WIDTH, S.HEIGHT));
-  const offX = Math.floor((size - S.WIDTH * scale) / 2);
-  const offY = Math.floor((size - S.HEIGHT * scale) / 2);
-  const px = Buffer.alloc(size * size * 4);
-  S.frame({ mouth: 'smile' }).forEach((row, y) => {
-    [...row].forEach((ch, x) => {
-      const color = S.PALETTE[ch];
-      if (!color) return;
-      const [r, g, b] = hexToRgb(color);
-      for (let dy = 0; dy < scale; dy++)
-        for (let dx = 0; dx < scale; dx++) {
-          const i = ((offY + y * scale + dy) * size + offX + x * scale + dx) * 4;
-          px[i] = r;
-          px[i + 1] = g;
-          px[i + 2] = b;
-          px[i + 3] = 255;
-        }
-    });
-  });
+  const px = rasterize(S.frame({ mouth: 'smile' }), { size });
   const raw = Buffer.alloc(size * (size * 4 + 1));
   for (let y = 0; y < size; y++) px.copy(raw, y * (size * 4 + 1) + 1, y * size * 4, (y + 1) * size * 4);
   const chunk = (type, data) => {
