@@ -94,7 +94,8 @@
   function speak(text) {
     if (!voiceOn || !text || !window.speechSynthesis) return;
     speechSynthesis.cancel();
-    const u = new SpeechSynthesisUtterance(text.replace(/[^\p{L}\p{N}\s.,!?«»—-]/gu, ''));
+    const spoken = text.replace(/[#@$%&*!]{3,}/g, ' пи-ип! ').replace(/\*/g, '');
+    const u = new SpeechSynthesisUtterance(spoken.replace(/[^\p{L}\p{N}\s.,!?«»—-]/gu, ''));
     u.lang = 'ru-RU';
     u.pitch = 1.6;
     u.rate = 1.1;
@@ -124,6 +125,7 @@
       if (i >= text.length) clearInterval(typeTimer);
     }, 25);
     const ms = opts.ms || Math.max(3500, text.length * 70);
+    if (hasCuss(text)) cuss(Math.min(ms, 4000));
     buddy.talk(Math.min(ms, text.length * 45));
     speak(text);
     if (!opts.sticky) bubbleTimer = setTimeout(() => (bubble.hidden = true), ms + (opts.quick ? 6000 : 0));
@@ -140,17 +142,39 @@
   // ---------- Ругается, пока человек в ленте ----------
   // Красный «!» висит над головой, Акыл злится и каждые ~12 с ворчит новой фразой.
   // Как только человек вернулся к делу (или перерыв, или конец сессии) — успокаивается.
+  // Ругается «по-мультяшному»: настоящих слов нет, только #@$%! и пиканье.
   const SCOLD = [
-    'Эй! Ну-ка закрывай {label}! 😤',
-    'Ойбай! Опять {label}?!',
-    'Я всё вижу! «{goal}» сама себя не сделает!',
-    'Так, хватит листать! Возвращайся!',
-    'Цель была «{goal}», а не {label}!',
-    'Ну сколько можно?! {label} подождёт!',
-    'Я сейчас обижусь! 😠 Работать!',
-    'Ещё минута в ленте — и я начну топать громче!',
-    'Балапан, работать пора! Закрывай это!',
+    'Эй! Закрывай {label}, #@$%! 🤬',
+    'Ойбай! Опять {label}?! *пи-и-ип*!',
+    'Я всё вижу, %#@&! «{goal}» сама себя не сделает!',
+    'Хватит листать, $#@!! Возвращайся!',
+    'Цель была «{goal}», а не {label}, #@$%&!',
+    'Ну сколько можно?! *пи-и-ип* *пи-и-ип*! 🤬',
+    'Я сейчас так выругаюсь, что цензура не спасёт! 🤬',
+    'Ещё минута в ленте — и я начну топать громче, #@$!',
+    'Балапан, работать! А то будет *пи-и-ип*!',
+    '%$#@&*!!! Это я так вежливо прошу вернуться 🙂',
   ];
+
+  // Символы мата над головой мелькают ~3 секунды, пока он ругается.
+  const GRAWLIX = ['#@$%!', '&%#@!', '$#!@%', '@#&!!', '*#@%&', '🤬#@$!', '%@#$!'];
+  let cussTimer = null;
+  function cuss(ms = 3000) {
+    const el = $('cuss');
+    clearInterval(cussTimer);
+    el.hidden = false;
+    const started = performance.now();
+    cussTimer = setInterval(() => {
+      if (performance.now() - started > ms) {
+        clearInterval(cussTimer);
+        el.hidden = true;
+        return;
+      }
+      el.textContent = pick(GRAWLIX);
+    }, 180);
+    el.textContent = pick(GRAWLIX);
+  }
+  const hasCuss = (text) => /[#@$%&*]{2,}|пи-+и*-*п|🤬/.test(text || '');
   let scoldTimer = null;
   let blockedTimer = null;
   let scoldCount = 0;
@@ -181,6 +205,8 @@
     clearInterval(scoldTimer);
     scoldTimer = null;
     $('alert-mark').hidden = true;
+    $('cuss').hidden = true;
+    clearInterval(cussTimer);
     buddy.setAngry(false);
   }
 

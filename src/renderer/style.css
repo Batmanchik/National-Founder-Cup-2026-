@@ -55,6 +55,12 @@ html, body {
 }
 #zzz span { display: inline-block; animation: float 1.6s steps(4) infinite; }
 #zzz span:nth-child(2) { animation-delay: 0.5s; font-size: 14px; }
+/* Мультяшный мат слева от головы (справа висит «!», сверху облачко): символы мелькают, пока Акыл ругается */
+#cuss {
+  position: absolute; right: 100%; top: 4px; margin-right: 4px; transform: rotate(-8deg); white-space: nowrap;
+  font-family: 'PressStart', monospace; font-size: 11px; color: var(--red); background: var(--ink);
+  padding: 2px 4px; text-shadow: none; pointer-events: none; z-index: 29;
+}
 #pop {
   position: absolute; left: 50%; top: -14px; transform: translateX(-50%); white-space: nowrap;
   font-family: 'PressStart', monospace; font-size: 9px; color: var(--yellow);

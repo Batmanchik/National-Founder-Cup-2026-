@@ -272,7 +272,9 @@
         const beat = Math.floor(this.t / 0.16) % 2;
         eyes = now > this.nextBlink ? 'blink' : 'angry';
         arms = this.mode === 'run' ? 'fist' : beat ? 'fist' : 'fist2';
-        mouth = now < this.talkingUntil ? (beat ? 'shout' : 'frown') : 'frown';
+        // Пока ругается: крик чередуется с цензурной полоской — мат «запикан».
+        const slow = Math.floor(this.t / 0.3) % 3;
+        mouth = now < this.talkingUntil ? (slow === 0 ? 'shout' : 'censor') : 'frown';
       }
       if (this.mode === 'sleep') {
         eyes = 'blink';
