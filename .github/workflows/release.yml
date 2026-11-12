@@ -1,7 +1,7 @@
 # Собирает установщики Nazar и выкладывает их в GitHub Releases.
 # Выпуск версии: поменять "version" в package.json, затем
 #   git tag v0.2.0 && git push origin v0.2.0
-# Ручной запуск (вкладка Actions → Release → Run workflow) собирает файлы без релиза: они лежат в Artifacts.
+# Или без тега: вкладка Actions → Release → Run workflow. Релиз v<версия из package.json> создастся сам.
 name: Release
 
 on:
@@ -60,16 +60,24 @@ jobs:
           if-no-files-found: error
 
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
     needs: build
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+      - name: Версия релиза
+        id: ver
+        run: |
+          if [[ "$GITHUB_REF" == refs/tags/v* ]]; then echo "tag=${GITHUB_REF#refs/tags/}" >> "$GITHUB_OUTPUT";
+          else echo "tag=v$(node -p "require('./package.json').version")" >> "$GITHUB_OUTPUT"; fi
       - uses: actions/download-artifact@v4
         with:
           path: out
           merge-multiple: true
       - uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.ver.outputs.tag }}
+          target_commitish: ${{ github.sha }}
+          name: Nazar ${{ steps.ver.outputs.tag }}
           files: out/*
           generate_release_notes: true
           body: |
