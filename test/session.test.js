@@ -39,3 +39,23 @@ test('фокус-процент, таймлайн и окончание врем
   assert.strictEqual(sum.timeline[2], 'distraction');
   assert.strictEqual(sum.topDistractors[0].label, 'Instagram');
 });
+
+const { applyIdle, IDLE_SEC } = require('../src/main/session');
+
+test('бездействие на ленте считается «не за компьютером», напоминаний нет', () => {
+  const s = new Session({ goal: 'код', minutes: 25, now: 0 });
+  const away = applyIdle(D, IDLE_SEC + 1);
+  assert.strictEqual(away.category, 'away');
+  let events = [];
+  for (let i = 1; i <= 30; i++) events.push(...s.record(away, 2, i * 2000));
+  assert.deepStrictEqual(events, []);
+  assert.strictEqual(s.totals.away, 60);
+  assert.strictEqual(s.totals.distraction, 0);
+  assert.strictEqual(s.focusScore(), 100);
+});
+
+test('бездействие не трогает фокус и видео', () => {
+  assert.strictEqual(applyIdle(F, IDLE_SEC * 3).category, 'focus');
+  assert.strictEqual(applyIdle({ category: 'distraction', label: 'Сериалы' }, IDLE_SEC * 3).category, 'distraction');
+  assert.strictEqual(applyIdle(D, IDLE_SEC - 1).category, 'distraction');
+});

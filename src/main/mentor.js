@@ -228,7 +228,7 @@ async function reportInsight(summary) {
       {
         role: 'user',
         content: `Цель: «${summary.goal}». Длительность ${summary.elapsedMin} мин (план ${summary.plannedMin}). Фокус ${summary.focusScore}%.
-По делу ${fmtMin(summary.totals.focus)}, отвлечения ${fmtMin(summary.totals.distraction)}, нейтрально ${fmtMin(summary.totals.neutral)}, перерывы ${fmtMin(summary.totals.break)}.
+По делу ${fmtMin(summary.totals.focus)}, отвлечения ${fmtMin(summary.totals.distraction)}, нейтрально ${fmtMin(summary.totals.neutral)}, перерывы ${fmtMin(summary.totals.break)}, не за компьютером ${fmtMin(summary.totals.away || 0)}.
 Главные отвлечения: ${top}. Напоминаний: ${summary.nudges}, возвратов к цели: ${summary.returns}.`,
       },
     ],

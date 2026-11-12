@@ -140,6 +140,7 @@ button.icon { padding: 0 6px; box-shadow: none; border: none; background: transp
 .distraction { background: var(--red); }
 .neutral { background: var(--gray); }
 .break { background: var(--violet); }
+.away { background: repeating-linear-gradient(45deg, var(--gray) 0 2px, #fff 2px 4px); }
 .receipt {
   background: #fff; border: 3px dashed var(--ink); padding: 10px 12px;
   font-size: 17px; display: flex; flex-direction: column; gap: 4px;

@@ -1,6 +1,6 @@
 // Локальное хранилище: опыт (XP), уровень, история сессий. Всё лежит в JSON на устройстве пользователя.
-const fs = require('fs');
 const path = require('path');
+const { writeJsonAtomic, readJsonSafe } = require('../shared/fsutil');
 
 const XP_PER_LEVEL = 25;
 
@@ -14,32 +14,35 @@ function dayKey(ts) {
   return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
 }
 
-// Сколько дней подряд (включая сегодня) были сессии.
+// Сдвиг на n календарных дней (через setDate, чтобы переход на летнее время не ломал счёт).
+function shiftDays(ts, n) {
+  const d = new Date(ts);
+  d.setDate(d.getDate() - n);
+  return d.getTime();
+}
+
+// Сколько дней подряд были сессии. Если сегодня сессии ещё не было, серия считается от вчера,
+// чтобы утром она не обнулялась раньше времени.
 function streakDays(sessions, now = Date.now()) {
   const days = new Set(sessions.map((s) => dayKey(s.endedAt)));
+  const start = days.has(dayKey(now)) ? 0 : 1;
   let streak = 0;
-  for (let i = 0; ; i++) {
-    if (days.has(dayKey(now - i * 86400000))) streak++;
-    else if (i > 0 || streak > 0) break;
-    else break;
-  }
+  while (days.has(dayKey(shiftDays(now, start + streak)))) streak++;
   return streak;
 }
 
 class Store {
   constructor(dir) {
     this.file = path.join(dir, 'nazar-data.json');
-    this.data = { xp: 0, sessions: [] };
-    try {
-      this.data = { ...this.data, ...JSON.parse(fs.readFileSync(this.file, 'utf8')) };
-    } catch {
-      /* первый запуск */
-    }
+    const saved = readJsonSafe(this.file) || {};
+    this.data = {
+      xp: Number.isFinite(saved.xp) ? saved.xp : 0,
+      sessions: Array.isArray(saved.sessions) ? saved.sessions : [],
+    };
   }
 
   save() {
-    fs.mkdirSync(path.dirname(this.file), { recursive: true });
-    fs.writeFileSync(this.file, JSON.stringify(this.data, null, 2));
+    writeJsonAtomic(this.file, this.data);
   }
 
   addSession(summary) {

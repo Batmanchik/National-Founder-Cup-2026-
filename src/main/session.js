@@ -3,6 +3,16 @@
 
 const DRIFT_NUDGE_SEC = Number(process.env.NAZAR_DRIFT_SEC) || 20; // через сколько секунд отвлечения ментор вмешивается
 const DRIFT_LONG_SEC = 120; // второе, более настойчивое напоминание
+const IDLE_SEC = 180; // сколько секунд без мыши и клавиатуры считать «нет за компьютером»
+// Видео можно смотреть, ничего не нажимая, поэтому для них бездействие не значит «ушёл».
+const PASSIVE_LABELS = /сериал|стрим|youtube|созвон|по цели/i;
+
+// Поправка вердикта на бездействие. Фокус не трогаем (человек может читать или смотреть лекцию).
+function applyIdle(verdict, idleSec) {
+  if (!verdict || idleSec < IDLE_SEC) return verdict;
+  if (verdict.category === 'focus' || PASSIVE_LABELS.test(verdict.label || '')) return verdict;
+  return { category: 'away', label: 'Нет за компьютером', reason: `нет активности ${Math.round(idleSec / 60)} мин`, soft: false };
+}
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, Math.round(Number(v) || lo)));
 
@@ -14,10 +24,10 @@ class Session {
     this.plannedMin = clamp(minutes || 25, 5, 240);
     this.startedAt = now;
     this.endedAt = null;
-    this.totals = { focus: 0, distraction: 0, neutral: 0, break: 0 };
+    this.totals = { focus: 0, distraction: 0, neutral: 0, break: 0, away: 0 };
     this.apps = {}; // label -> секунды
     this.distractors = {}; // label -> секунды отвлечения
-    this.timeline = []; // по минутам: { focus, distraction, neutral, break }
+    this.timeline = []; // по минутам: { focus, distraction, neutral, break, away }
     this.driftStreak = 0;
     this.driftNotified = false;
     this.longNotified = false;
@@ -39,7 +49,7 @@ class Session {
 
   _bucket(now) {
     const idx = Math.floor((now - this.startedAt) / 60000);
-    while (this.timeline.length <= idx) this.timeline.push({ focus: 0, distraction: 0, neutral: 0, break: 0 });
+    while (this.timeline.length <= idx) this.timeline.push({ focus: 0, distraction: 0, neutral: 0, break: 0, away: 0 });
     return this.timeline[idx];
   }
 
@@ -61,10 +71,10 @@ class Session {
       return events;
     }
 
-    const cat = verdict.category;
+    const cat = verdict.category in this.totals && verdict.category !== 'break' ? verdict.category : 'neutral';
     this.totals[cat] += dt;
     bucket[cat] += dt;
-    this.apps[verdict.label] = (this.apps[verdict.label] || 0) + dt;
+    if (cat !== 'away') this.apps[verdict.label] = (this.apps[verdict.label] || 0) + dt;
 
     if (cat === 'distraction') {
       this.distractors[verdict.label] = (this.distractors[verdict.label] || 0) + dt;
@@ -82,6 +92,11 @@ class Session {
         this.returns += 1;
         events.push('back');
       }
+      this.driftStreak = 0;
+      this.driftNotified = false;
+      this.longNotified = false;
+    } else if (cat === 'away') {
+      // Человек отошёл: напоминать некому. Когда вернётся, счёт отвлечения начнётся заново.
       this.driftStreak = 0;
       this.driftNotified = false;
       this.longNotified = false;
@@ -163,4 +178,4 @@ class Session {
   }
 }
 
-module.exports = { Session, DRIFT_NUDGE_SEC, DRIFT_LONG_SEC };
+module.exports = { Session, applyIdle, DRIFT_NUDGE_SEC, DRIFT_LONG_SEC, IDLE_SEC };

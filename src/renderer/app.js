@@ -304,6 +304,9 @@
     $('r-time').textContent = `${s.elapsedMin} из ${s.plannedMin} мин`;
     $('r-focus').textContent = fmtMin(s.totals.focus);
     $('r-dist').textContent = fmtMin(s.totals.distraction);
+    const away = s.totals.away || 0;
+    $('r-away-row').hidden = away < 60;
+    $('r-away').textContent = fmtMin(away);
     $('r-nudges').textContent = `${s.nudges} раз`;
     $('r-returns').textContent = `${s.returns} раз`;
     $('r-thieves').textContent = s.topDistractors.length ? s.topDistractors.map((d) => `${d.label} ${fmtMin(d.sec)}`).join(', ') : 'не нашлось 💪';

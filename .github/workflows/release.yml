@@ -1,0 +1,83 @@
+# Собирает установщики Nazar и выкладывает их в GitHub Releases.
+# Выпуск версии: поменять "version" в package.json, затем
+#   git tag v0.2.0 && git push origin v0.2.0
+# Ручной запуск (вкладка Actions → Release → Run workflow) собирает файлы без релиза: они лежат в Artifacts.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+      - run: npm test
+
+  build:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            target: --win
+            files: dist/Nazar-Setup-*.exe
+          - os: macos-latest
+            target: --mac
+            files: dist/Nazar-*-mac.dmg
+          - os: ubuntu-latest
+            target: --linux
+            files: dist/Nazar-*-linux.AppImage
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run icons
+      - run: npx electron-builder ${{ matrix.target }} --publish never
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false' # без сертификата подписи
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nazar-${{ matrix.os }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: out
+          merge-multiple: true
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: out/*
+          generate_release_notes: true
+          body: |
+            ## Как установить Nazar
+
+            **Windows:** скачайте `Nazar-Setup-*.exe` и запустите. Если появится «Windows защитила ваш компьютер», нажмите «Подробнее» → «Выполнить в любом случае» (у установщика пока нет платной подписи).
+            После установки на рабочем столе появится ярлык **Nazar**: в нём включение и выключение Акыла и все настройки.
+
+            **macOS:** откройте `.dmg` и перетащите Nazar в «Программы». При первом запуске: правый клик → «Открыть».
+
+            **Linux:** `chmod +x Nazar-*.AppImage` и запустите. Нужен `xdotool`.

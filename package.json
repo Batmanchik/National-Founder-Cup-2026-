@@ -1,11 +1,14 @@
 {
   "name": "nazar-mentor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Nazar — пиксельный ИИ-ментор на экране ноутбука, который помогает удерживать цель и показывает честный чек внимания",
   "main": "src/main/main.js",
   "scripts": {
     "start": "electron .",
     "test": "node --test test/*.test.js",
+    "icons": "node scripts/make-icon.js",
+    "dist": "npm run icons && electron-builder --publish never",
+    "dist:win": "npm run icons && electron-builder --win --publish never",
     "install-app": "node scripts/install-windows.js"
   },
   "license": "MIT",
@@ -14,6 +17,82 @@
     "dotenv": "16.4.5"
   },
   "devDependencies": {
-    "electron": "44.9.3"
+    "electron": "44.9.3",
+    "electron-builder": "26.18.0"
+  },
+  "productName": "Nazar",
+  "author": {
+    "name": "QUANTIX"
+  },
+  "homepage": "https://github.com/hackathon-kz/national-founder-cup-shymkent-2026-69-quantix",
+  "build": {
+    "appId": "kz.quantix.nazar",
+    "productName": "Nazar",
+    "copyright": "© 2026 QUANTIX",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json",
+      "!**/*.map"
+    ],
+    "asar": true,
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": "always",
+      "createStartMenuShortcut": true,
+      "shortcutName": "Nazar",
+      "uninstallDisplayName": "Nazar — ментор Акыл",
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "installerLanguages": [
+        "ru_RU"
+      ],
+      "language": "1049",
+      "artifactName": "Nazar-Setup-${version}.${ext}"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "icon": "build/icon.png",
+      "category": "public.app-category.productivity",
+      "extendInfo": {
+        "NSAppleEventsUsageDescription": "Nazar смотрит, какое окно и вкладка активны, чтобы отличать работу от ленты.",
+        "NSScreenCaptureUsageDescription": "Зрение Nazar (если включено) анализирует снимок экрана."
+      },
+      "artifactName": "Nazar-${version}-mac.${ext}"
+    },
+    "dmg": {
+      "title": "Nazar"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "icon": "build/icon.png",
+      "category": "Utility",
+      "artifactName": "Nazar-${version}-linux.${ext}"
+    }
   }
 }

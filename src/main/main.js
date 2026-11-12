@@ -2,10 +2,10 @@
 const path = require('path');
 require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 
-const { app, BrowserWindow, ipcMain, screen, Tray, Menu, desktopCapturer, globalShortcut, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, screen, Tray, Menu, desktopCapturer, globalShortcut, safeStorage, powerMonitor } = require('electron');
 const { ActivityWatcher } = require('./activity');
 const { classify } = require('./classifier');
-const { Session } = require('./session');
+const { Session, applyIdle } = require('./session');
 const { Store } = require('./store');
 const { SettingsStore } = require('./settings');
 const mentor = require('./mentor');
@@ -224,7 +224,7 @@ function handleEvent(ev, w, v) {
 function tick() {
   const w = watcher.window;
   if (!session) return send('activity', { window: w, verdict: null, state: liveState() });
-  const v = verdictFor(w);
+  const v = applyIdle(verdictFor(w), powerMonitor.getSystemIdleTime());
   const events = session.record(v, TICK_MS / 1000);
   send('activity', { window: w, verdict: v, state: liveState() });
   events.forEach((ev) => handleEvent(ev, w, v));

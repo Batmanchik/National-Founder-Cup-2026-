@@ -1,7 +1,7 @@
 // Настройки приложения: хранятся в JSON в папке данных, API-ключ лежит только в зашифрованном виде.
 // Шифрование передаётся снаружи (safeStorage), поэтому логику можно тестировать без Electron.
-const fs = require('fs');
 const path = require('path');
+const { writeJsonAtomic, readJsonSafe } = require('../shared/fsutil');
 
 const MODELS = ['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-haiku-5-5'];
 
@@ -67,19 +67,14 @@ class SettingsStore {
     this.crypto = crypto;
     this.base = normalize(envDefaults, DEFAULTS);
     this.apiKeyEnc = '';
-    let saved = {};
-    try {
-      saved = JSON.parse(fs.readFileSync(this.file, 'utf8'));
-      this.apiKeyEnc = typeof saved.apiKeyEnc === 'string' ? saved.apiKeyEnc : '';
-    } catch {
-      /* первый запуск или повреждённый файл: работаем со значениями по умолчанию */
-    }
+    // Первый запуск или повреждённый файл: работаем со значениями по умолчанию.
+    const saved = readJsonSafe(this.file) || {};
+    this.apiKeyEnc = typeof saved.apiKeyEnc === 'string' ? saved.apiKeyEnc : '';
     this.data = normalize(saved, this.base);
   }
 
   _save() {
-    fs.mkdirSync(path.dirname(this.file), { recursive: true });
-    fs.writeFileSync(this.file, JSON.stringify({ ...this.data, apiKeyEnc: this.apiKeyEnc }, null, 2));
+    writeJsonAtomic(this.file, { ...this.data, apiKeyEnc: this.apiKeyEnc });
   }
 
   // patch.apiKey: новый ключ (пустая строка значит «не менять»); patch.clearKey: удалить ключ.
