@@ -77,13 +77,16 @@ class ActivityWatcher {
   }
 
   start() {
+    this._stopped = false;
     if (process.platform === 'win32') return this._startWindows();
     this._timer = setInterval(() => this._poll(), 1500);
     this._poll();
   }
 
   stop() {
+    this._stopped = true;
     clearInterval(this._timer);
+    clearTimeout(this._restartTimer);
     if (this._proc) this._proc.kill();
   }
 
@@ -107,7 +110,14 @@ class ActivityWatcher {
       }
     });
     this._proc.on('error', () => (this.supported = false));
-    this._proc.on('exit', () => (this._proc = null));
+    this._proc.on('exit', () => {
+      this._proc = null;
+      // PowerShell упал (или его закрыл антивирус) — перезапускаем, иначе Акыл навсегда «застрянет» на последнем окне.
+      if (!this._stopped && this.supported) {
+        this.current = { app: '', title: '', url: '' };
+        this._restartTimer = setTimeout(() => this._startWindows(), 3000);
+      }
+    });
   }
 
   async _poll() {

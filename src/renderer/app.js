@@ -128,6 +128,7 @@
 
   function say(text, opts = {}) {
     if (!text) return;
+    scoldBubble = opts.mood === 'worried' && Boolean(opts.sticky); // напоминание или ругань с кнопками
     clearTimeout(bubbleTimer);
     clearInterval(typeTimer);
     bubble.hidden = false;
@@ -199,7 +200,8 @@
     }, 180);
     el.textContent = pick(GRAWLIX);
   }
-  const hasCuss = (text) => /[#@$%&*]{2,}|пи-+и*-*п|🤬/.test(text || '');
+  const hasCuss = (text) => /[#@$%&*]{2,}|пи(?:-+и*)+п|🤬/.test(text || '');
+  let scoldBubble = false; // в облачке сейчас ругань — её надо убрать, когда Акыл успокоится
   let scoldTimer = null;
   let blockedTimer = null;
   let scoldCount = 0;
@@ -225,6 +227,7 @@
       // Первой всегда звучит фирменная фраза Акыла, дальше — вперемешку.
       const text = scoldCount === 1 ? SCOLD[0] : scoldLine();
       say(text, { mood: 'worried', quick: ['↩️ Возвращаюсь', '✅ Это по работе'], sticky: true });
+      scoldBubble = true;
     }, 12000);
   }
   function stopScolding() {
@@ -235,6 +238,10 @@
     $('cuss').hidden = true;
     clearInterval(cussTimer);
     buddy.setAngry(false);
+    if (scoldBubble) {
+      bubble.hidden = true;
+      scoldBubble = false;
+    }
   }
 
   // ---------- Реакции на события ----------

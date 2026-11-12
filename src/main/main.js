@@ -74,8 +74,14 @@ function markSystemShutdown() {
   persistActive(true);
 }
 
+// Удаляем синхронно: иначе при быстром выходе файл может остаться, и сессия «воскреснет» при следующем запуске.
 function clearActive() {
-  if (activeFile) fs.rm(activeFile, { force: true }, () => {});
+  if (!activeFile) return;
+  try {
+    fs.rmSync(activeFile, { force: true });
+  } catch (err) {
+    console.error('[lock]', err.message);
+  }
 }
 
 // Попытка выключить во время блокировки: Акыл бежит к центру и ругается, чем дальше — тем злее.
@@ -279,7 +285,10 @@ function verdictFor(w) {
       pendingWindow.add(key);
       mentor.classifyWindow(session.goal, w).then((res) => {
         pendingWindow.delete(key);
-        if (res) windowCache.set(key, res);
+        if (res) {
+          windowCache.set(key, res);
+          if (windowCache.size > 300) windowCache.delete(windowCache.keys().next().value); // не растёт бесконечно
+        }
       });
     }
   }
@@ -359,6 +368,11 @@ function startSession({ goal, minutes, vision, strict }) {
   if (locked()) return liveState(); // новую сессию поверх заблокированной не начать
   if (typeof vision === 'boolean') visionEnabled = vision;
   const strictOn = typeof strict === 'boolean' ? strict : settings.data.strictMode;
+  // Новая сессия поверх незаблокированной (например, «Новая сессия…» в трее): старую сохраняем, а не теряем.
+  if (session) {
+    store.addSession(session.summary());
+    clearActive();
+  }
   session = new Session({ goal, minutes, driftSec: settings.data.driftSec, strict: strictOn });
   persistActive(true);
   chatHistory = [];

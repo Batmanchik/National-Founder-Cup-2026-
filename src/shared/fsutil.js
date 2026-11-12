@@ -6,8 +6,15 @@ const path = require('path');
 function writeJsonAtomic(file, data) {
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 2));
-  fs.renameSync(tmp, file);
+  const text = JSON.stringify(data, null, 2);
+  fs.writeFileSync(tmp, text);
+  try {
+    fs.renameSync(tmp, file);
+  } catch {
+    // В Windows файл иногда держит антивирус или индексатор: пишем напрямую, чтобы данные не пропали.
+    fs.writeFileSync(file, text);
+    fs.rmSync(tmp, { force: true });
+  }
 }
 
 // Читает JSON. Нет файла — возвращает null. Файл повреждён — откладывает его в .broken, чтобы не затереть.
