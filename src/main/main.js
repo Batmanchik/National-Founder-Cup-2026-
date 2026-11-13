@@ -10,7 +10,7 @@ const { Store } = require('./store');
 const { SettingsStore } = require('./settings');
 const mentor = require('./mentor');
 const lines = require('./lines');
-const { fmtMin, minutes: minutesText, minutesAcc } = require('../shared/util');
+const { fmtMin, fmtTenge, minutes: minutesText, minutesAcc } = require('../shared/util');
 const voice = require('./voice');
 const { makeTrayIcon } = require('./icon');
 const { LockFile } = require('./lock-file');
@@ -309,7 +309,10 @@ function handleEvent(ev, w, v) {
       const current = session;
       mentor.nudge(chatContext()).then((text) => {
         if (session !== current || !session.longNotified) return; // человек уже вернулся
-        say(text || lines.line('driftLong', vars), { mood: 'worried', action: 'run', quick: DRIFT_QUICK });
+        // Без ИИ: если лента уже «заработала» заметную сумму — напоминаем деньгами, это действует сильнее.
+        const money = session.live().adValue;
+        const fallback = money >= 1 ? lines.line('driftMoney', { ...vars, money: fmtTenge(money) }) : lines.line('driftLong', vars);
+        say(text || fallback, { mood: 'worried', action: 'run', quick: DRIFT_QUICK });
       });
     }
   }
@@ -390,7 +393,7 @@ function endSession() {
   session = null;
   buildTrayMenu();
   notifyPanel();
-  const report = { summary, profile: store.profile() };
+  const report = { summary, profile: store.profile(), ad: store.adValue() };
   send('report', report);
   mentor.reportInsight(summary, memoryBefore).then((text) => send('report-insight', { id: summary.id, text }));
   return report;

@@ -1,6 +1,7 @@
 // Фокус-сессия: копит время по категориям и решает, когда ментору реагировать.
 // Чистая логика без Electron — её покрывают тесты в test/session.test.js.
 const { clamp } = require('../shared/util');
+const { adValue } = require('./attention-value');
 
 const DRIFT_NUDGE_SEC = Number(process.env.NAZAR_DRIFT_SEC) || 20; // через сколько секунд отвлечения ментор вмешивается
 const DRIFT_LONG_SEC = 120; // второе, более настойчивое напоминание
@@ -226,6 +227,7 @@ class Session {
       lockLeftSec: this.lockLeftSec(now),
       breakLeftSec: Math.max(0, Math.round((this.breakUntil - now) / 1000)),
       breakEarnedMin: this.earnedBreak(),
+      adValue: adValue(this.distractors).tenge,
       focusSinceBreakMin: Math.round(this.focusSinceBreak / 60),
       driftStreak: this.driftStreak,
     };
@@ -257,6 +259,7 @@ class Session {
       shutdownAttempts: this.shutdownAttempts,
       surrendered: this.surrendered,
       topDistractors: top(this.distractors),
+      adValue: Math.round(adValue(this.distractors).tenge * 10) / 10, // «счёт за внимание», ₸
       topApps: top(this.apps),
       timeline: this.timeline.map((b) => {
         const entries = Object.entries(b).filter(([, v]) => v > 0);

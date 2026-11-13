@@ -478,6 +478,25 @@ button.icon {
   border-top: 2px dashed var(--ink);
   margin: 4px 0;
 }
+.receipt .bill-title {
+  font-family: 'PressStart', monospace;
+  font-size: 9px;
+  letter-spacing: 1px;
+  cursor: help;
+}
+.receipt .bad {
+  color: var(--red);
+}
+.receipt .good {
+  color: var(--teal-d);
+}
+.receipt .bill-note {
+  margin: 2px 0 0;
+  font-size: 14px;
+  line-height: 1.25;
+  color: var(--muted, #55586b);
+}
+
 .insight {
   margin-top: 10px;
   background: var(--paper-2);

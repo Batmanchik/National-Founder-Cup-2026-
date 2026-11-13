@@ -1,6 +1,7 @@
 // Локальное хранилище: опыт (XP), уровень, история сессий. Всё лежит в JSON на устройстве пользователя.
 const path = require('path');
 const { writeJsonAtomic, readJsonSafe } = require('../shared/fsutil');
+const { weeklyAdValue } = require('./attention-value');
 
 const XP_PER_LEVEL = 25;
 
@@ -52,6 +53,11 @@ class Store {
     this.save();
   }
 
+  /** «Счёт за внимание» за 7 дней и прогноз на год. */
+  adValue(now = Date.now()) {
+    return weeklyAdValue(this.data.sessions, now);
+  }
+
   memory(now = Date.now()) {
     return memoryOf(this.data.sessions, now);
   }
@@ -95,6 +101,7 @@ function memoryOf(sessions, now = Date.now()) {
   return {
     sessions: sessions.length,
     weekSessions: week.length,
+    weekAdValue: weeklyAdValue(sessions, now).week,
     avgFocus,
     topThieves,
     bestTime,

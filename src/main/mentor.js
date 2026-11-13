@@ -2,7 +2,7 @@
 // С ключом ANTHROPIC_API_KEY использует Claude: чат с действиями, оценку окна, анализ скриншота, вывод по сессии.
 // Без ключа работает офлайн на шаблонах, поэтому демо не ломается без интернета.
 const Anthropic = require('@anthropic-ai/sdk').default;
-const { clamp, pick, fmtMin, minutesAcc } = require('../shared/util');
+const { clamp, pick, fmtMin, fmtTenge, minutesAcc } = require('../shared/util');
 const { TIPS, setCustomLines } = require('./lines');
 
 let MODEL = process.env.NAZAR_MODEL || 'claude-opus-5-5';
@@ -138,6 +138,8 @@ function contextText(ctx) {
 function memoryText(m) {
   if (!m) return '';
   const parts = [`Прошлые сессии: всего ${m.sessions}, за неделю ${m.weekSessions}, средний фокус ${m.avgFocus}%.`];
+  if (m.weekAdValue >= 1)
+    parts.push(`«Счёт за внимание»: за неделю платформы заработали на нём около ${fmtTenge(m.weekAdValue)} рекламой (оценка).`);
   if (m.topThieves.length)
     parts.push(`Главные отвлечения за неделю: ${m.topThieves.map((t) => `${t.label} ${fmtMin(t.sec)}`).join(', ')}.`);
   if (m.bestTime)
@@ -166,6 +168,14 @@ function offlineChat(text, ctx) {
   if (/продл|ещё|еще|больше времени/.test(t)) {
     const m = clamp(num || 15, 5, 60);
     return { reply: `Добавил ${minutesAcc(m)}. Держим темп!`, action: 'extend', minutes: m };
+  }
+  if (/на мне.{0,20}заработ|заработ.{0,20}на мне|сч[её]т за внимание|стоит мо[её] внимание|тенге/.test(t)) {
+    const now = ctx.live ? ctx.live.adValue : 0;
+    const week = ctx.memory ? ctx.memory.weekAdValue : 0;
+    const parts = [`За эту сессию платформы заработали на тебе ${fmtTenge(now)}.`];
+    if (week >= 1) parts.push(`За неделю ${fmtTenge(week)}, за год в таком темпе ${fmtTenge(week * 52)}.`);
+    parts.push('А ты от них получил 0 ₸.');
+    return { reply: parts.join(' '), action: 'none', minutes: 0 };
   }
   if (/осталось|сколько времени|таймер/.test(t) && ctx.live) {
     return { reply: `Осталось ${fmtMin(ctx.live.remainingSec)}. Фокус пока ${ctx.live.focusScore}%.`, action: 'none', minutes: 0 };

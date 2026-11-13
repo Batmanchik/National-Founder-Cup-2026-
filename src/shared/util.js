@@ -30,6 +30,14 @@
   /** Короткая длительность: «40 сек» или «12 мин». */
   const fmtMin = (sec) => (sec < 60 ? `${Math.round(sec)} сек` : `${Math.round(sec / 60)} мин`);
 
+  /** Сумма в тенге: «≈ 4,6 ₸» для мелочи, «≈ 1 250 ₸» с пробелами между тысячами. */
+  function fmtTenge(tenge) {
+    const t = Number(tenge) || 0;
+    if (t < 0.05) return '0 ₸';
+    const text = t < 10 ? t.toFixed(1).replace('.', ',') : String(Math.round(t)).replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+    return `≈ ${text} ₸`;
+  }
+
   /** Таймер «мм:сс». */
   const fmtClock = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
 
@@ -42,7 +50,7 @@
   /** Подставляет {ключи} в шаблон: fill('Цель «{goal}»', { goal: 'код' }). */
   const fill = (template, vars = {}) => template.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 
-  const api = { clamp, pick, plural, minutes, minutesAcc, times, fmtMin, fmtClock, hexToRgb, fill };
+  const api = { clamp, pick, plural, minutes, minutesAcc, times, fmtMin, fmtClock, fmtTenge, hexToRgb, fill };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.NazarUtil = api;

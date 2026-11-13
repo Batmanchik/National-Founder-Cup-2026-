@@ -3,7 +3,7 @@
   'use strict';
   const $ = (id) => document.getElementById(id);
   const api = window.nazar;
-  const { pick, fmtMin, fmtClock, times } = NazarUtil;
+  const { pick, fmtMin, fmtClock, fmtTenge, times } = NazarUtil;
 
   const buddyEl = $('buddy');
   const buddy = new Buddy(buddyEl, $('buddy-canvas'));
@@ -477,7 +477,7 @@
 
   // ---------- Чек внимания ----------
   let reportId = null;
-  api.on('report', ({ summary: s, profile: p }) => {
+  api.on('report', ({ summary: s, profile: p, ad }) => {
     reportId = s.id;
     stopScolding();
     Object.values(panels).forEach((x) => (x.hidden = true));
@@ -492,6 +492,13 @@
     $('r-attempts-row').hidden = !s.shutdownAttempts;
     $('r-attempts').textContent = `${times(s.shutdownAttempts)} 😤`;
     $('r-surrender-row').hidden = !s.surrendered;
+    // Счёт за внимание: сколько платформы заработали на этой сессии и к чему это ведёт за год.
+    $('r-ad').textContent = s.adValue ? fmtTenge(s.adValue) : '0 ₸ 💪';
+    $('r-earned').textContent = `+${s.xpEarned} баллов`;
+    $('r-ad-note').textContent =
+      ad && ad.week >= 1
+        ? `За неделю лента заработала на тебе ${fmtTenge(ad.week)}. В таком темпе за год — ${fmtTenge(ad.year)}.`
+        : 'Ни тенге платформам за эту неделю. Так держать!';
     const away = s.totals.away || 0;
     $('r-away-row').hidden = away < 60;
     $('r-away').textContent = fmtMin(away);
