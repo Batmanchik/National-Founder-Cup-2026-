@@ -115,7 +115,8 @@ function classify(win, goal, custom = {}) {
   const myFocus = hit(custom.focus);
   if (myFocus) return { category: 'focus', label: myFocus, reason: 'мой список работы', soft: false };
   const myDistract = hit(custom.distract);
-  if (myDistract) return { category: 'distraction', label: myDistract, reason: 'мой список отвлечений', soft: false };
+  // confident: явная лента — Акыл реагирует за секунды, не дожидаясь обычного порога.
+  if (myDistract) return { category: 'distraction', label: myDistract, reason: 'мой список отвлечений', soft: false, confident: true };
 
   const lowered = `${title} ${url}`.toLowerCase();
   const stem = goalStems(goal).find((s) => lowered.includes(s));
@@ -127,7 +128,8 @@ function classify(win, goal, custom = {}) {
   }
 
   for (const rule of DISTRACTION) {
-    if (rule.re.test(text)) return { category: 'distraction', label: rule.label, reason: 'список отвлечений', soft: false };
+    if (rule.re.test(text))
+      return { category: 'distraction', label: rule.label, reason: 'список отвлечений', soft: false, confident: true };
   }
   for (const rule of FOCUS) {
     if (rule.re.test(text)) return { category: 'focus', label: rule.label, reason: 'рабочее приложение', soft: false };

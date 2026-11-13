@@ -34,7 +34,7 @@ while ($true) {
   $o = @{ app = $name; title = $sb.ToString() } | ConvertTo-Json -Compress
   [Console]::Out.WriteLine($o)
   [Console]::Out.Flush()
-  Start-Sleep -Milliseconds 1500
+  Start-Sleep -Milliseconds 700
 }
 `;
 
@@ -79,7 +79,7 @@ class ActivityWatcher {
   start() {
     this._stopped = false;
     if (process.platform === 'win32') return this._startWindows();
-    this._timer = setInterval(() => this._poll(), 1500);
+    this._timer = setInterval(() => this._poll(), 1000);
     this._poll();
   }
 

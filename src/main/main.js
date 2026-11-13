@@ -16,7 +16,7 @@ const { makeTrayIcon } = require('./icon');
 const { LockFile } = require('./lock-file');
 const { trayMenuTemplate } = require('./tray-menu');
 
-const TICK_MS = 2000;
+const TICK_MS = 1000; // раз в секунду: быстрая реакция на ленту
 const HIDDEN_START = process.argv.includes('--hidden'); // автозапуск при входе в Windows: без окна управления
 
 if (process.platform === 'linux') {
@@ -316,6 +316,16 @@ function handleEvent(ev, w, v) {
       });
     }
   }
+  if (ev === 'slip-ahead' || ev === 'slip-trigger') {
+    const f = session.forecast;
+    const text = lines.line(ev === 'slip-ahead' ? 'slipAhead' : 'slipTrigger', {
+      min: f.typicalMin,
+      trigger: f.trigger,
+      target: f.target || 'ленту',
+      goal: session.goal,
+    });
+    say(text, { mood: 'worried' });
+  }
   if (ev === 'bet-danger') {
     say(lines.line('betDanger', { points: points(session.bet), target: BET_TARGET, score: session.focusScore() }), { mood: 'worried' });
   }
@@ -375,11 +385,14 @@ function startSession({ goal, minutes, vision, strict, bet }) {
   // Ставить можно только то, что есть: баллов меньше ставки — ставка не принимается.
   const stake = clamp(bet, 0, store.data.xp, 0);
   const allIn = stake > 0 && stake === store.data.xp;
-  session = new Session({ goal, minutes, driftSec: settings.data.driftSec, strict: strictOn, bet: stake });
+  const forecast = store.forecast(); // когда человек обычно срывается — Акыл предупредит заранее
+  session = new Session({ goal, minutes, driftSec: settings.data.driftSec, strict: strictOn, bet: stake, forecast });
   persistActive(true);
   chatHistory = [];
   lastVision = null;
-  const start = lines.startLine(session.goal, store.memory());
+  const start =
+    lines.startLine(session.goal, store.memory()) +
+    (forecast && forecast.typicalMin >= 3 ? ` ${lines.line('startForecast', { min: forecast.typicalMin })}` : '');
   const betLine = session.bet
     ? ` ${lines.line(allIn ? 'betAllIn' : 'betStart', { points: points(session.bet), target: BET_TARGET, double: session.bet * 2 })}`
     : '';

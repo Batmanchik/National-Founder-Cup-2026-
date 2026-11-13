@@ -204,3 +204,21 @@ test('итог ставки меняет баллы в хранилище и н�
   assert.strictEqual(store.data.xp, 0);
   fsT.rmSync(dir, { recursive: true, force: true });
 });
+
+const { FAST_DRIFT_SEC } = require('../src/main/session');
+const { classify } = require('../src/main/classifier');
+
+test('явная лента: Акыл ругается за секунды, сомнительное окно — по обычному порогу', () => {
+  const insta = classify({ app: 'chrome', title: 'Reels • Instagram' }, 'курсовая');
+  assert.strictEqual(insta.confident, true);
+  const s = new Session({ goal: 'курсовая', minutes: 25, driftSec: 20, now: 0 });
+  const ev = [];
+  for (let t = 1; t <= FAST_DRIFT_SEC; t++) ev.push(...s.record(insta, 1, t * 1000));
+  assert.deepStrictEqual(ev, ['drift'], `напоминание через ${FAST_DRIFT_SEC} с`);
+
+  const unsure = { category: 'distraction', label: 'YouTube', reason: 'ИИ: развлекательное видео' };
+  const s2 = new Session({ goal: 'курсовая', minutes: 25, driftSec: 20, now: 0 });
+  const ev2 = [];
+  for (let t = 1; t <= 10; t++) ev2.push(...s2.record(unsure, 1, t * 1000));
+  assert.deepStrictEqual(ev2, [], 'окно, оценённое ИИ, ждёт обычные 20 с');
+});

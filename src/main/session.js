@@ -5,6 +5,9 @@ const { adValue } = require('./attention-value');
 
 const DRIFT_NUDGE_SEC = Number(process.env.NAZAR_DRIFT_SEC) || 20; // через сколько секунд отвлечения ментор вмешивается
 const DRIFT_LONG_SEC = 120; // второе, более настойчивое напоминание
+// Явная лента (Instagram, TikTok, Reels, свой список отвлечений) — реакция за секунды.
+// Вместе с опросом окна (~0,7 с) и тиком (1 с) Акыл начинает ругаться через 3–5 с после открытия ленты.
+const FAST_DRIFT_SEC = 3;
 const IDLE_SEC = 180; // сколько секунд без мыши и клавиатуры считать «нет за компьютером»
 // Видео можно смотреть, ничего не нажимая, поэтому для них бездействие не значит «ушёл».
 const PASSIVE_LABELS = /сериал|стрим|youtube|созвон|по цели/i;
@@ -36,6 +39,12 @@ const BREAK_DUE_AT_MIN = [50, 90]; // когда Акыл сам предлаг�
 const BET_TARGET = 80; // нужный процент фокуса
 const BET_WARN_AFTER_MIN = 5; // раньше предупреждать бессмысленно: процент ещё скачет
 
+// «Ловим момент до срыва»: прогноз (из store.forecastOf) говорит, на какой минуте работы человек обычно
+// срывается и после какого окна. За минуту до этого момента Акыл предупреждает — до срыва, а не после.
+const SLIP_WARN_BEFORE_MIN = 1;
+const SLIP_MIN_TYPICAL = 3; // прогноз «срываешься на 1-й минуте» бесполезен
+const MAX_SLIPS = 20;
+
 function earnedBreakMin(focusSec) {
   const focusMin = focusSec / 60;
   if (focusMin < MIN_FOCUS_FOR_BREAK) return 0;
@@ -44,7 +53,7 @@ function earnedBreakMin(focusSec) {
 }
 
 class Session {
-  constructor({ goal, minutes, driftSec, strict = false, bet = 0, now = Date.now() }) {
+  constructor({ goal, minutes, driftSec, strict = false, bet = 0, forecast = null, now = Date.now() }) {
     this.id = String(now);
     this.setDriftSec(driftSec);
     this.goal = String(goal || '').trim() || 'Без цели';
@@ -70,6 +79,15 @@ class Session {
     this.surrendered = false; // сдался досрочно
     this.bet = Math.max(0, Math.floor(Number(bet) || 0)); // баллы на кону (что не больше баланса, проверяет main)
     this.betWarned = false;
+    // Срывы этой сессии и прогноз по прошлым
+    this.forecast = forecast; // { typicalMin, trigger, target } или null
+    this.slips = []; // { afterMin, before, beforeCat, to }
+    this.streakStart = now; // с какого момента человек непрерывно в работе
+    this.lastWorkLabel = null; // последнее окно перед лентой — откуда уходят
+    this.lastWorkCat = null; // его категория: «крючком» может быть только нейтральное окно
+    this.slipStart = null; // начало текущего ухода в ленту
+    this.aheadWarned = false;
+    this.triggerWarned = false;
   }
 
   // Восстановить сессию из снимка (после того как Nazar убили через диспетчер задач).
@@ -80,6 +98,40 @@ class Session {
 
   snapshot() {
     return JSON.parse(JSON.stringify(this));
+  }
+
+  // Новая полоса работы: после старта, возврата из ленты или перерыва.
+  _newStreak(now) {
+    this.streakStart = now;
+    this.slipStart = null;
+    this.aheadWarned = false;
+    this.triggerWarned = false;
+  }
+
+  // Засчитываем срыв, когда Акыл реально напомнил (короткие заглядывания в ленту не считаются).
+  _recordSlip() {
+    const st = this.slipStart;
+    if (!st) return;
+    const afterMin = Math.max(0, Math.round(((st.at - this.streakStart) / 60000) * 10) / 10);
+    this.slips.push({ afterMin, before: st.before, beforeCat: st.beforeCat, to: st.to });
+    if (this.slips.length > MAX_SLIPS) this.slips.shift();
+  }
+
+  // Предупреждения до срыва: подходит типичная минута или открыто окно-«крючок».
+  _slipWarnings(verdict, now) {
+    const f = this.forecast;
+    if (!f) return [];
+    const out = [];
+    const workedMin = (now - this.streakStart) / 60000;
+    if (!this.aheadWarned && f.typicalMin >= SLIP_MIN_TYPICAL && workedMin >= f.typicalMin - SLIP_WARN_BEFORE_MIN) {
+      this.aheadWarned = true;
+      out.push('slip-ahead');
+    }
+    if (!this.triggerWarned && f.trigger && verdict.label === f.trigger) {
+      this.triggerWarned = true;
+      out.push('slip-trigger');
+    }
+    return out;
   }
 
   // Итог ставки: выиграл, если дотянул до конца таймера, не сдался и фокус ≥ 80%. Выигрыш = ставка (итого ×2).
@@ -126,6 +178,7 @@ class Session {
       this.driftStreak = 0;
       this.driftNotified = false;
       this.longNotified = false;
+      this._newStreak(now);
       events.push('break-over');
     }
 
@@ -143,10 +196,14 @@ class Session {
 
     if (cat === 'distraction') {
       this.distractors[verdict.label] = (this.distractors[verdict.label] || 0) + dt;
+      if (!this.driftStreak)
+        this.slipStart = { at: now - dt * 1000, before: this.lastWorkLabel, beforeCat: this.lastWorkCat, to: verdict.label };
       this.driftStreak += dt;
-      if (!this.driftNotified && this.driftStreak >= this.driftNudgeSec) {
+      const threshold = verdict.confident ? Math.min(FAST_DRIFT_SEC, this.driftNudgeSec) : this.driftNudgeSec;
+      if (!this.driftNotified && this.driftStreak >= threshold) {
         this.driftNotified = true;
         this.nudges += 1;
+        this._recordSlip();
         events.push('drift');
       } else if (this.driftNotified && !this.longNotified && this.driftStreak >= this.driftLongSec) {
         this.longNotified = true;
@@ -161,6 +218,7 @@ class Session {
       }
       if (this.driftNotified) {
         this.returns += 1;
+        this._newStreak(now);
         events.push('back');
       }
       this.driftStreak = 0;
@@ -173,6 +231,14 @@ class Session {
       this.longNotified = false;
     }
     // neutral: счётчик отвлечения замирает, но не сбрасывается
+
+    if (cat === 'focus' || cat === 'neutral') {
+      if (verdict.label) {
+        this.lastWorkLabel = verdict.label;
+        this.lastWorkCat = cat;
+      }
+      events.push(...this._slipWarnings(verdict, now));
+    }
 
     // Ставка под угрозой: фокус просел ниже порога — один раз предупреждаем, снова только после того, как поднялся.
     if (this.bet && now - this.startedAt >= BET_WARN_AFTER_MIN * 60000) {
@@ -287,6 +353,7 @@ class Session {
       topDistractors: top(this.distractors),
       adValue: Math.round(adValue(this.distractors).tenge * 10) / 10, // «счёт за внимание», ₸
       bet: this.betResult(now),
+      slips: this.slips.slice(),
       topApps: top(this.apps),
       timeline: this.timeline.map((b) => {
         const entries = Object.entries(b).filter(([, v]) => v > 0);
@@ -298,4 +365,4 @@ class Session {
   }
 }
 
-module.exports = { Session, applyIdle, earnedBreakMin, BET_TARGET, DRIFT_NUDGE_SEC, DRIFT_LONG_SEC, IDLE_SEC };
+module.exports = { Session, applyIdle, earnedBreakMin, BET_TARGET, FAST_DRIFT_SEC, DRIFT_NUDGE_SEC, DRIFT_LONG_SEC, IDLE_SEC };

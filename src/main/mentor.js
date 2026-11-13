@@ -139,6 +139,11 @@ function contextText(ctx) {
 function memoryText(m) {
   if (!m) return '';
   const parts = [`Прошлые сессии: всего ${m.sessions}, за неделю ${m.weekSessions}, средний фокус ${m.avgFocus}%.`];
+  if (m.forecast)
+    parts.push(
+      `Обычно срывается на ${m.forecast.typicalMin}-й минуте работы, чаще в «${m.forecast.target}»` +
+        (m.forecast.trigger ? `, после «${m.forecast.trigger}».` : '.')
+    );
   if (m.weekAdValue >= 1)
     parts.push(`«Счёт за внимание»: за неделю платформы заработали на нём около ${fmtTenge(m.weekAdValue)} рекламой (оценка).`);
   if (m.topThieves.length)
@@ -178,6 +183,17 @@ function offlineChat(text, ctx) {
     parts.push('А ты от них получил 0 ₸.');
     return { reply: parts.join(' '), action: 'none', minutes: 0 };
   }
+  if (/когда.{0,12}сры|мой паттерн|прогноз|почему.{0,12}отвлека/.test(t)) {
+    const f = ctx.memory && ctx.memory.forecast;
+    if (!f)
+      return { reply: 'Пока мало данных: нужно хотя бы 3 срыва в истории. Работай — я присматриваюсь 👀', action: 'none', minutes: 0 };
+    const trig = f.trigger ? ` Чаще всего после «${f.trigger}».` : '';
+    return {
+      reply: `Ты обычно срываешься на ${f.typicalMin}-й минуте, в «${f.target}».${trig} Я предупрежу за минуту до этого.`,
+      action: 'none',
+      minutes: 0,
+    };
+  }
   if (/осталось|сколько времени|таймер/.test(t) && ctx.live) {
     return { reply: `Осталось ${fmtMin(ctx.live.remainingSec)}. Фокус пока ${ctx.live.focusScore}%.`, action: 'none', minutes: 0 };
   }
@@ -213,7 +229,8 @@ function offlineChat(text, ctx) {
   }
   if (/что умеешь|помощь|help|команды/.test(t)) {
     return {
-      reply: 'Могу: «дай перерыв» (сколько заслужил), «продли на 15», «как я?», «сколько осталось», «это по работе», «я закончил».',
+      reply:
+        'Могу: «дай перерыв» (сколько заслужил), «продли на 15», «как я?», «сколько осталось», «когда я срываюсь?», «это по работе», «я закончил».',
       action: 'none',
       minutes: 0,
     };

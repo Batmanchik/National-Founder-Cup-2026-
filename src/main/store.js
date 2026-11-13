@@ -54,6 +54,11 @@ class Store {
     this.save();
   }
 
+  /** Прогноз срыва по истории (или null, если срывов пока мало). */
+  forecast() {
+    return forecastOf(this.data.sessions);
+  }
+
   /** «Счёт за внимание» за 7 дней и прогноз на год. */
   adValue(now = Date.now()) {
     return weeklyAdValue(this.data.sessions, now);
@@ -103,6 +108,7 @@ function memoryOf(sessions, now = Date.now()) {
     sessions: sessions.length,
     weekSessions: week.length,
     weekAdValue: weeklyAdValue(sessions, now).week,
+    forecast: forecastOf(sessions),
     avgFocus,
     topThieves,
     bestTime,
@@ -114,4 +120,28 @@ function memoryOf(sessions, now = Date.now()) {
   };
 }
 
-module.exports = { Store, levelFor, streakDays, memoryOf };
+// Прогноз срыва по истории: на какой минуте непрерывной работы человек обычно уходит в ленту,
+// из какого нейтрального окна (мессенджер, проводник…) и куда. Нужно хотя бы 3 срыва.
+const FORECAST_MIN_SLIPS = 3;
+
+function mode(values) {
+  const counts = {};
+  for (const v of values) if (v) counts[v] = (counts[v] || 0) + 1;
+  const best = Object.entries(counts).sort((a, b) => b[1] - a[1])[0];
+  return best ? { value: best[0], count: best[1] } : null;
+}
+
+function forecastOf(sessions) {
+  const slips = sessions.slice(0, 30).flatMap((s) => s.slips || []);
+  if (slips.length < FORECAST_MIN_SLIPS) return null;
+  const mins = slips.map((x) => x.afterMin).sort((a, b) => a - b);
+  const mid = Math.floor(mins.length / 2);
+  const median = mins.length % 2 ? mins[mid] : (mins[mid - 1] + mins[mid]) / 2;
+  const target = mode(slips.map((x) => x.to));
+  // «Крючок» — только нейтральное окно, которое стоит перед срывом хотя бы в 40% случаев (и минимум дважды).
+  const trig = mode(slips.filter((x) => x.beforeCat === 'neutral').map((x) => x.before));
+  const trigger = trig && trig.count >= 2 && trig.count / slips.length >= 0.4 ? trig.value : null;
+  return { typicalMin: Math.round(median), trigger, target: target ? target.value : null, slips: slips.length };
+}
+
+module.exports = { Store, levelFor, streakDays, memoryOf, forecastOf };
