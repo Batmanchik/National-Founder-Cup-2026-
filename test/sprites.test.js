@@ -2,7 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const S = require('../src/shared/sprites');
 
-test('все строки спрайта одной ширины и цвета есть в палитре', () => {
+test('все строки спрайта ровно 16 символов и цвета есть в палитре', () => {
   const combos = [];
   for (const eyes of Object.keys(S.PARTS.eyes))
     for (const mouth of Object.keys(S.PARTS.mouth))

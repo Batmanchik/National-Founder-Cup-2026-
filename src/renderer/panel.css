@@ -49,8 +49,8 @@ body {
   color: var(--paper);
 }
 #akyl {
-  width: 64px;
-  height: 76px;
+  width: 48px;
+  height: 60px;
   image-rendering: pixelated;
   flex: none;
 }
