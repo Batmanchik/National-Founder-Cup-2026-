@@ -14,6 +14,7 @@
 
   let state = null;
   let minutes = 25;
+  let bet = 0;
   let bubbleTimer = null;
   let typeTimer = null;
   let voiceOn = false; // берётся из настроек (state.speak)
@@ -298,6 +299,14 @@
     sc.className = `score ${l.focusScore < 50 ? 'low' : l.focusScore < 80 ? 'mid' : ''}`;
     $('hud-eye').hidden = !s.vision;
     $('hud-lock').hidden = !l.locked;
+    // Ставка: 🎲50, красным — если сейчас проигрывается.
+    const hb = $('hud-bet');
+    hb.hidden = !l.bet;
+    if (l.bet) {
+      hb.textContent = `🎲${l.bet.stake}`;
+      hb.className = l.bet.onTrack ? '' : 'low';
+      hb.title = `Ставка ${l.bet.stake} баллов: нужно ${l.bet.target}% фокуса до конца таймера`;
+    }
     if (!l.onBreak && !$('zzz').hidden) {
       $('zzz').hidden = true;
       buddy.wake();
@@ -372,6 +381,14 @@
     $('vision').disabled = !(state && state.ai);
     $('vision').checked = Boolean(state && state.vision);
     $('strict').checked = Boolean(state && state.strictDefault);
+    // Ставить можно только то, что есть.
+    const xp = (state && state.profile && state.profile.xp) || 0;
+    $('bet-balance').textContent = `· у тебя ${xp} баллов`;
+    [...$('bet').children].forEach((b) => {
+      b.disabled = Number(b.dataset.bet) > xp;
+      if (b.disabled && Number(b.dataset.bet) === bet) bet = 0;
+    });
+    [...$('bet').children].forEach((x) => x.classList.toggle('active', Number(x.dataset.bet) === bet));
     $('ai-hint').textContent =
       state && state.ai ? `ИИ: ${state.model}` : 'Офлайн-режим: добавь ANTHROPIC_API_KEY в .env, чтобы включить ИИ-чат и зрение.';
     if (state && !state.trackingSupported)
@@ -384,6 +401,12 @@
     minutes = Number(b.dataset.min);
     [...$('minutes').children].forEach((x) => x.classList.toggle('active', x === b));
   });
+  $('bet').addEventListener('click', (e) => {
+    const b = e.target.closest('button');
+    if (!b || b.disabled) return;
+    bet = Number(b.dataset.bet);
+    [...$('bet').children].forEach((x) => x.classList.toggle('active', x === b));
+  });
   async function start() {
     const goal = $('goal').value.trim();
     if (!goal) {
@@ -392,7 +415,7 @@
       return;
     }
     panels.onboarding.hidden = true;
-    state = await api.startSession({ goal, minutes, vision: $('vision').checked, strict: $('strict').checked });
+    state = await api.startSession({ goal, minutes, bet, vision: $('vision').checked, strict: $('strict').checked });
     if (state.session && state.session.locked)
       say(`🔒 Блокировка включена: до конца сессии меня не выключить. Сдаться можно только словами «я сдаюсь».`, { ms: 6000 });
     $('chat-log').innerHTML = '';
@@ -489,6 +512,13 @@
     $('r-time').textContent = `${s.elapsedMin} из ${s.plannedMin} мин`;
     $('r-focus').textContent = fmtMin(s.totals.focus);
     $('r-dist').textContent = fmtMin(s.totals.distraction);
+    // Итог ставки на себя
+    $('r-bet-row').hidden = !s.bet;
+    if (s.bet) {
+      const why = { early: 'не дотянул до конца', focus: `фокус ниже ${s.bet.target}%`, surrendered: 'сдался' }[s.bet.reason];
+      $('r-bet').textContent = s.bet.won ? `+${s.bet.stake} 🎉 сыграла` : `−${s.bet.stake}, ${why}`;
+      $('r-bet').className = s.bet.won ? 'good' : 'bad';
+    }
     $('r-attempts-row').hidden = !s.shutdownAttempts;
     $('r-attempts').textContent = `${times(s.shutdownAttempts)} 😤`;
     $('r-surrender-row').hidden = !s.surrendered;
@@ -507,7 +537,8 @@
     $('r-thieves').textContent = s.topDistractors.length
       ? s.topDistractors.map((d) => `${d.label} ${fmtMin(d.sec)}`).join(', ')
       : 'не нашлось 💪';
-    $('r-xp').textContent = `+${s.xpEarned} (всего ${p.xp})`;
+    const betDelta = s.bet ? s.bet.delta : 0;
+    $('r-xp').textContent = `${s.xpEarned + betDelta >= 0 ? '+' : '−'}${Math.abs(s.xpEarned + betDelta)} (всего ${p.xp})`;
     $('r-level').textContent = `${p.level} · серия ${p.streak} дн.`;
     $('r-insight').textContent = 'думаю…';
     const tl = $('r-timeline');

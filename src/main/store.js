@@ -47,7 +47,8 @@ class Store {
   }
 
   addSession(summary) {
-    this.data.xp += summary.xpEarned;
+    const betDelta = summary.bet ? summary.bet.delta : 0;
+    this.data.xp = Math.max(0, this.data.xp + summary.xpEarned + betDelta);
     this.data.sessions.unshift(summary);
     this.data.sessions = this.data.sessions.slice(0, 50);
     this.save();

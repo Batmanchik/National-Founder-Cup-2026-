@@ -22,6 +22,7 @@
         <span id="hud-score" class="score">100%</span>
         <span id="hud-eye" title="Зрение включено" hidden>👁</span>
         <span id="hud-lock" title="Блокировка: до конца сессии Акыла не выключить" hidden>🔒</span>
+        <span id="hud-bet" hidden></span>
       </div>
     </div>
 
@@ -44,6 +45,14 @@
         <button data-min="50">50</button>
         <button data-min="90">90</button>
       </div>
+      <div class="label">🎲 Ставка на себя <small id="bet-balance"></small></div>
+      <div class="chips" id="bet">
+        <button data-bet="0" class="active">нет</button>
+        <button data-bet="25">25</button>
+        <button data-bet="50">50</button>
+        <button data-bet="100">100</button>
+      </div>
+      <p class="hint" id="bet-hint">Держишь фокус 80%+ до конца таймера — ставка удваивается. Нет — баллы сгорают.</p>
       <label class="toggle" id="vision-row">
         <input type="checkbox" id="vision" />
         <span
@@ -96,6 +105,7 @@
         <div><span>Время сессии</span><b id="r-time"></b></div>
         <div><span>По делу</span><b id="r-focus"></b></div>
         <div><span>Утекло в ленту</span><b id="r-dist"></b></div>
+        <div id="r-bet-row" hidden><span>🎲 Ставка</span><b id="r-bet"></b></div>
         <div id="r-attempts-row" hidden><span>Пытался выключить Акыла</span><b id="r-attempts"></b></div>
         <div id="r-surrender-row" hidden><span>Финиш</span><b>сдался досрочно 🏳</b></div>
         <div id="r-away-row" hidden><span>Не за компьютером</span><b id="r-away"></b></div>

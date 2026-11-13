@@ -120,6 +120,7 @@ function contextText(ctx) {
     lines.push(
       `Прошло ${fmtMin(l.elapsedSec)} из ${l.plannedMin} мин. Фокус ${l.focusScore}%. ` +
         `По делу ${fmtMin(l.totals.focus)}, отвлечения ${fmtMin(l.totals.distraction)}.` +
+        (l.bet ? ` Человек поставил ${l.bet.stake} баллов, что удержит фокус ${l.bet.target}%+ до конца таймера.` : '') +
         (l.onBreak
           ? ' Сейчас перерыв.'
           : ` С прошлого перерыва ${l.focusSinceBreakMin} мин фокуса, заработано ${l.breakEarnedMin} мин отдыха.`)
@@ -189,8 +190,13 @@ function offlineChat(text, ctx) {
           ? ` Это выше твоего среднего (${m.avgFocus}%) 🔥`
           : ` Твой средний ${m.avgFocus}%, догоняем.`
         : '';
+    const bet = !l.bet
+      ? ''
+      : l.bet.onTrack
+        ? ` 🎲 Ставка ${l.bet.stake} баллов пока в силе.`
+        : ` 🎲 Ставка ${l.bet.stake} баллов горит: нужно ${l.bet.target}%!`;
     return {
-      reply: `Фокус ${l.focusScore}%: по делу ${fmtMin(l.totals.focus)}, отвлечения ${fmtMin(l.totals.distraction)}.${cmp}`,
+      reply: `Фокус ${l.focusScore}%: по делу ${fmtMin(l.totals.focus)}, отвлечения ${fmtMin(l.totals.distraction)}.${cmp}${bet}`,
       action: 'none',
       minutes: 0,
     };

@@ -5,7 +5,7 @@ require('dotenv').config({ path: path.join(__dirname, '..', '..', '.env') });
 const { app, BrowserWindow, ipcMain, screen, Tray, Menu, desktopCapturer, globalShortcut, safeStorage, powerMonitor } = require('electron');
 const { ActivityWatcher } = require('./activity');
 const { classify, windowKeyword, isSelf } = require('./classifier');
-const { Session, applyIdle } = require('./session');
+const { Session, applyIdle, BET_TARGET } = require('./session');
 const { Store } = require('./store');
 const { SettingsStore } = require('./settings');
 const mentor = require('./mentor');
@@ -316,6 +316,9 @@ function handleEvent(ev, w, v) {
       });
     }
   }
+  if (ev === 'bet-danger') {
+    say(lines.line('betDanger', { stake: session.bet, target: BET_TARGET, score: session.focusScore() }), { mood: 'worried' });
+  }
   if (ev === 'break-due') {
     const m = session.earnedBreak();
     say(lines.line('breakDue', { work: minutesText(Math.round(session.focusSinceBreak / 60)), m: minutesAcc(m) }), {
@@ -360,7 +363,7 @@ async function visionTick() {
   }
 }
 
-function startSession({ goal, minutes, vision, strict }) {
+function startSession({ goal, minutes, vision, strict, bet }) {
   if (locked()) return liveState(); // новую сессию поверх заблокированной не начать
   if (typeof vision === 'boolean') visionEnabled = vision;
   const strictOn = typeof strict === 'boolean' ? strict : settings.data.strictMode;
@@ -369,11 +372,15 @@ function startSession({ goal, minutes, vision, strict }) {
     store.addSession(session.summary());
     clearActive();
   }
-  session = new Session({ goal, minutes, driftSec: settings.data.driftSec, strict: strictOn });
+  // Ставить можно только то, что есть: баллов меньше ставки — ставка не принимается.
+  const stake = Number(bet) > 0 && Number(bet) <= store.data.xp ? Number(bet) : 0;
+  session = new Session({ goal, minutes, driftSec: settings.data.driftSec, strict: strictOn, bet: stake });
   persistActive(true);
   chatHistory = [];
   lastVision = null;
-  say(lines.startLine(session.goal, store.memory()), { mood: 'happy', action: 'jump' });
+  const start = lines.startLine(session.goal, store.memory());
+  const betLine = session.bet ? ` ${lines.line('betStart', { stake: session.bet, target: BET_TARGET, double: session.bet * 2 })}` : '';
+  say(start + betLine, { mood: 'happy', action: 'jump' });
   buildTrayMenu();
   notifyPanel();
   return liveState();

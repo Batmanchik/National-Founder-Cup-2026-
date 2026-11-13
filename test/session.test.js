@@ -145,3 +145,60 @@ test('после 50 мин фокуса Акыл сам предлагает п�
     ['break-due']
   );
 });
+
+const { Store } = require('../src/main/store');
+const fsT = require('fs');
+const osT = require('os');
+const pathT = require('path');
+
+test('ставка на себя: выигрыш — фокус 80%+ до конца таймера', () => {
+  const s = new Session({ goal: 'код', minutes: 25, bet: 50, now: 0 });
+  s.record(F, 22 * 60, 22 * 60_000);
+  s.record(D, 3 * 60, 25 * 60_000);
+  const r = s.summary(25 * 60_000).bet;
+  assert.strictEqual(r.won, true);
+  assert.strictEqual(r.delta, 50);
+});
+
+test('ставка сгорает: раньше таймера, низкий фокус или сдался', () => {
+  const early = new Session({ goal: 'код', minutes: 25, bet: 25, now: 0 });
+  early.record(F, 10 * 60, 10 * 60_000);
+  assert.deepStrictEqual([early.betResult(10 * 60_000).reason, early.betResult(10 * 60_000).delta], ['early', -25]);
+
+  const low = new Session({ goal: 'код', minutes: 25, bet: 25, now: 0 });
+  low.record(F, 15 * 60, 15 * 60_000);
+  low.record(D, 10 * 60, 25 * 60_000);
+  assert.strictEqual(low.betResult(25 * 60_000).reason, 'focus');
+
+  const gaveUp = new Session({ goal: 'код', minutes: 25, bet: 100, strict: true, now: 0 });
+  gaveUp.record(F, 25 * 60, 25 * 60_000);
+  gaveUp.surrendered = true;
+  assert.strictEqual(gaveUp.betResult(25 * 60_000).reason, 'surrendered');
+});
+
+test('без ставки и с недопустимой ставкой — ничего не разыгрывается', () => {
+  assert.strictEqual(new Session({ goal: 'код', minutes: 25, now: 0 }).summary(0).bet, null);
+  assert.strictEqual(new Session({ goal: 'код', minutes: 25, bet: 777, now: 0 }).bet, 0);
+});
+
+test('Акыл предупреждает, когда ставка горит, и не спамит', () => {
+  const s = new Session({ goal: 'код', minutes: 60, bet: 50, now: 0 });
+  const ev = [];
+  for (let t = 1; t <= 6; t++) ev.push(...s.record(D, 60, t * 60_000)); // всё время в ленте
+  for (let t = 7; t <= 8; t++) ev.push(...s.record(D, 60, t * 60_000));
+  assert.deepStrictEqual(
+    ev.filter((e) => e === 'bet-danger'),
+    ['bet-danger']
+  );
+});
+
+test('итог ставки меняет баллы в хранилище и не уводит их в минус', () => {
+  const dir = fsT.mkdtempSync(pathT.join(osT.tmpdir(), 'nazar-bet-'));
+  const store = new Store(dir);
+  store.data.xp = 30;
+  store.addSession({ xpEarned: 5, bet: { delta: 50 }, endedAt: Date.now() });
+  assert.strictEqual(store.data.xp, 85);
+  store.addSession({ xpEarned: 0, bet: { delta: -100 }, endedAt: Date.now() });
+  assert.strictEqual(store.data.xp, 0);
+  fsT.rmSync(dir, { recursive: true, force: true });
+});

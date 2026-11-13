@@ -30,6 +30,13 @@ const LONG_FOCUS_MIN = 90;
 const MAX_LONG_BREAK = 20;
 const BREAK_DUE_AT_MIN = [50, 90]; // когда Акыл сам предлагает передышку
 
+// «Ставка на себя»: человек ставит свои баллы, что продержит фокус до конца таймера.
+// Добровольная ставка с ценой за срыв — тот же механизм, что в эксперименте Allcott et al. (2022, AER):
+// когда люди сами ставили себе ограничение, использование соцсетей заметно снижалось.
+const BET_STAKES = [0, 25, 50, 100];
+const BET_TARGET = 80; // нужный процент фокуса
+const BET_WARN_AFTER_MIN = 5; // раньше предупреждать бессмысленно: процент ещё скачет
+
 function earnedBreakMin(focusSec) {
   const focusMin = focusSec / 60;
   if (focusMin < MIN_FOCUS_FOR_BREAK) return 0;
@@ -38,7 +45,7 @@ function earnedBreakMin(focusSec) {
 }
 
 class Session {
-  constructor({ goal, minutes, driftSec, strict = false, now = Date.now() }) {
+  constructor({ goal, minutes, driftSec, strict = false, bet = 0, now = Date.now() }) {
     this.id = String(now);
     this.setDriftSec(driftSec);
     this.goal = String(goal || '').trim() || 'Без цели';
@@ -62,6 +69,8 @@ class Session {
     this.strict = Boolean(strict); // блокировка выключения: до конца сессии Акыла не выключить
     this.shutdownAttempts = 0; // сколько раз пытались выключить или закрыть
     this.surrendered = false; // сдался досрочно
+    this.bet = BET_STAKES.includes(Number(bet)) ? Number(bet) : 0; // баллы на кону
+    this.betWarned = false;
   }
 
   // Восстановить сессию из снимка (после того как Nazar убили через диспетчер задач).
@@ -72,6 +81,14 @@ class Session {
 
   snapshot() {
     return JSON.parse(JSON.stringify(this));
+  }
+
+  // Итог ставки: выиграл, если дотянул до конца таймера, не сдался и фокус ≥ 80%. Выигрыш = ставка (итого ×2).
+  betResult(now = Date.now()) {
+    if (!this.bet) return null;
+    const won = this.isTimeUp(now) && !this.surrendered && this.focusScore() >= BET_TARGET;
+    const reason = won ? 'won' : this.surrendered ? 'surrendered' : !this.isTimeUp(now) ? 'early' : 'focus';
+    return { stake: this.bet, target: BET_TARGET, won, reason, delta: won ? this.bet : -this.bet };
   }
 
   isTimeUp(now = Date.now()) {
@@ -158,6 +175,15 @@ class Session {
     }
     // neutral: счётчик отвлечения замирает, но не сбрасывается
 
+    // Ставка под угрозой: фокус просел ниже порога — один раз предупреждаем, снова только после того, как поднялся.
+    if (this.bet && now - this.startedAt >= BET_WARN_AFTER_MIN * 60000) {
+      const below = this.focusScore() < BET_TARGET;
+      if (below && !this.betWarned) {
+        this.betWarned = true;
+        events.push('bet-danger');
+      } else if (!below && this.focusScore() >= BET_TARGET + 5) this.betWarned = false;
+    }
+
     if (!this.timeUpNotified && now - this.startedAt >= this.plannedMin * 60000) {
       this.timeUpNotified = true;
       events.push('time-up');
@@ -227,6 +253,7 @@ class Session {
       lockLeftSec: this.lockLeftSec(now),
       breakLeftSec: Math.max(0, Math.round((this.breakUntil - now) / 1000)),
       breakEarnedMin: this.earnedBreak(),
+      bet: this.bet ? { stake: this.bet, target: BET_TARGET, onTrack: this.focusScore() >= BET_TARGET } : null,
       adValue: adValue(this.distractors).tenge,
       focusSinceBreakMin: Math.round(this.focusSinceBreak / 60),
       driftStreak: this.driftStreak,
@@ -260,6 +287,7 @@ class Session {
       surrendered: this.surrendered,
       topDistractors: top(this.distractors),
       adValue: Math.round(adValue(this.distractors).tenge * 10) / 10, // «счёт за внимание», ₸
+      bet: this.betResult(now),
       topApps: top(this.apps),
       timeline: this.timeline.map((b) => {
         const entries = Object.entries(b).filter(([, v]) => v > 0);
@@ -271,4 +299,4 @@ class Session {
   }
 }
 
-module.exports = { Session, applyIdle, earnedBreakMin, DRIFT_NUDGE_SEC, DRIFT_LONG_SEC, IDLE_SEC };
+module.exports = { Session, applyIdle, earnedBreakMin, BET_STAKES, BET_TARGET, DRIFT_NUDGE_SEC, DRIFT_LONG_SEC, IDLE_SEC };

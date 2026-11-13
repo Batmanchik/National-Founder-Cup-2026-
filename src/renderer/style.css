@@ -190,6 +190,7 @@ body {
 #hud .score {
   color: var(--teal);
 }
+#hud #hud-bet.low,
 #hud .score.low {
   color: var(--red);
 }
@@ -509,4 +510,9 @@ button.icon {
   font-family: 'PressStart', monospace;
   font-size: 12px;
   padding: 8px 10px;
+}
+
+.chips button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
 }
