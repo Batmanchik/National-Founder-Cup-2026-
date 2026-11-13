@@ -33,7 +33,6 @@ const BREAK_DUE_AT_MIN = [50, 90]; // когда Акыл сам предлаг�
 // «Ставка на себя»: человек ставит свои баллы, что продержит фокус до конца таймера.
 // Добровольная ставка с ценой за срыв — тот же механизм, что в эксперименте Allcott et al. (2022, AER):
 // когда люди сами ставили себе ограничение, использование соцсетей заметно снижалось.
-const BET_STAKES = [0, 25, 50, 100];
 const BET_TARGET = 80; // нужный процент фокуса
 const BET_WARN_AFTER_MIN = 5; // раньше предупреждать бессмысленно: процент ещё скачет
 
@@ -69,7 +68,7 @@ class Session {
     this.strict = Boolean(strict); // блокировка выключения: до конца сессии Акыла не выключить
     this.shutdownAttempts = 0; // сколько раз пытались выключить или закрыть
     this.surrendered = false; // сдался досрочно
-    this.bet = BET_STAKES.includes(Number(bet)) ? Number(bet) : 0; // баллы на кону
+    this.bet = Math.max(0, Math.floor(Number(bet) || 0)); // баллы на кону (что не больше баланса, проверяет main)
     this.betWarned = false;
   }
 
@@ -299,4 +298,4 @@ class Session {
   }
 }
 
-module.exports = { Session, applyIdle, earnedBreakMin, BET_STAKES, BET_TARGET, DRIFT_NUDGE_SEC, DRIFT_LONG_SEC, IDLE_SEC };
+module.exports = { Session, applyIdle, earnedBreakMin, BET_TARGET, DRIFT_NUDGE_SEC, DRIFT_LONG_SEC, IDLE_SEC };

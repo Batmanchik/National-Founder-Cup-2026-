@@ -24,6 +24,8 @@
   /** «3 минуты» (как в «прошло 3 минуты») и «1 минуту» (как в «дай 1 минуту»). */
   const minutes = (n) => `${n} ${plural(n, 'минута', 'минуты', 'минут')}`;
   const minutesAcc = (n) => `${n} ${plural(n, 'минуту', 'минуты', 'минут')}`;
+  /** «1 балл», «3 балла», «333 балла», «500 баллов». */
+  const points = (n) => `${n} ${plural(n, 'балл', 'балла', 'баллов')}`;
   /** «1 раз», «2 раза», «5 раз». */
   const times = (n) => `${n} ${plural(n, 'раз', 'раза', 'раз')}`;
 
@@ -38,6 +40,23 @@
     return `≈ ${text} ₸`;
   }
 
+  /**
+   * Готовые ставки от баланса: 10%, 25%, 50% и ва-банк (всегда последний). Одинаковые суммы при маленьком балансе не повторяются.
+   * betOptions(500) → [{ amount: 50, label: '10% · 50' }, …, { amount: 500, label: 'Ва-банк · 500', allIn: true }]
+   */
+  function betOptions(balance, shares = [0.1, 0.25, 0.5]) {
+    const b = Math.max(0, Math.floor(Number(balance) || 0));
+    if (!b) return [];
+    const out = [];
+    for (const share of shares) {
+      const amount = Math.max(1, Math.round(b * share));
+      if (amount >= b || out.some((o) => o.amount === amount)) continue; // не дублируем и не путаем с ва-банком
+      out.push({ amount, allIn: false, label: `${Math.round(share * 100)}% · ${amount}` });
+    }
+    out.push({ amount: b, allIn: true, label: `Ва-банк · ${b}` });
+    return out;
+  }
+
   /** Таймер «мм:сс». */
   const fmtClock = (sec) => `${String(Math.floor(sec / 60)).padStart(2, '0')}:${String(Math.floor(sec % 60)).padStart(2, '0')}`;
 
@@ -50,7 +69,7 @@
   /** Подставляет {ключи} в шаблон: fill('Цель «{goal}»', { goal: 'код' }). */
   const fill = (template, vars = {}) => template.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? '');
 
-  const api = { clamp, pick, plural, minutes, minutesAcc, times, fmtMin, fmtClock, fmtTenge, hexToRgb, fill };
+  const api = { clamp, pick, plural, minutes, minutesAcc, points, times, fmtMin, fmtClock, fmtTenge, betOptions, hexToRgb, fill };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.NazarUtil = api;

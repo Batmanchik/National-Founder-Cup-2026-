@@ -10,7 +10,7 @@ const { Store } = require('./store');
 const { SettingsStore } = require('./settings');
 const mentor = require('./mentor');
 const lines = require('./lines');
-const { fmtMin, fmtTenge, minutes: minutesText, minutesAcc } = require('../shared/util');
+const { clamp, fmtMin, fmtTenge, minutes: minutesText, minutesAcc, points } = require('../shared/util');
 const voice = require('./voice');
 const { makeTrayIcon } = require('./icon');
 const { LockFile } = require('./lock-file');
@@ -317,7 +317,7 @@ function handleEvent(ev, w, v) {
     }
   }
   if (ev === 'bet-danger') {
-    say(lines.line('betDanger', { stake: session.bet, target: BET_TARGET, score: session.focusScore() }), { mood: 'worried' });
+    say(lines.line('betDanger', { points: points(session.bet), target: BET_TARGET, score: session.focusScore() }), { mood: 'worried' });
   }
   if (ev === 'break-due') {
     const m = session.earnedBreak();
@@ -373,13 +373,16 @@ function startSession({ goal, minutes, vision, strict, bet }) {
     clearActive();
   }
   // Ставить можно только то, что есть: баллов меньше ставки — ставка не принимается.
-  const stake = Number(bet) > 0 && Number(bet) <= store.data.xp ? Number(bet) : 0;
+  const stake = clamp(bet, 0, store.data.xp, 0);
+  const allIn = stake > 0 && stake === store.data.xp;
   session = new Session({ goal, minutes, driftSec: settings.data.driftSec, strict: strictOn, bet: stake });
   persistActive(true);
   chatHistory = [];
   lastVision = null;
   const start = lines.startLine(session.goal, store.memory());
-  const betLine = session.bet ? ` ${lines.line('betStart', { stake: session.bet, target: BET_TARGET, double: session.bet * 2 })}` : '';
+  const betLine = session.bet
+    ? ` ${lines.line(allIn ? 'betAllIn' : 'betStart', { points: points(session.bet), target: BET_TARGET, double: session.bet * 2 })}`
+    : '';
   say(start + betLine, { mood: 'happy', action: 'jump' });
   buildTrayMenu();
   notifyPanel();

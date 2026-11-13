@@ -3,7 +3,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { clamp, plural, minutes, minutesAcc, times, fmtMin, fmtClock, hexToRgb, fill } = require('../src/shared/util');
+const { clamp, plural, minutes, minutesAcc, points, times, fmtMin, fmtClock, hexToRgb, fill } = require('../src/shared/util');
 const { trayMenuTemplate } = require('../src/main/tray-menu');
 const { LockFile } = require('../src/main/lock-file');
 const { Session } = require('../src/main/session');
@@ -22,6 +22,9 @@ test('склонения по-русски', () => {
   assert.strictEqual(minutes(3), '3 минуты');
   assert.strictEqual(minutes(12), '12 минут');
   assert.strictEqual(times(4), '4 раза');
+  assert.strictEqual(points(333), '333 балла');
+  assert.strictEqual(points(500), '500 баллов');
+  assert.strictEqual(points(21), '21 балл');
   assert.strictEqual(times(11), '11 раз');
 });
 
@@ -56,4 +59,31 @@ test('снимок блокировки: сохраняется только д�
   lf.clear();
   assert.strictEqual(lf.load(), null);
   fs.rmSync(dir, { recursive: true, force: true });
+});
+
+const { betOptions } = require('../src/shared/util');
+
+test('ставки считаются от баланса: при 500 баллах 50/125/250/500', () => {
+  assert.deepStrictEqual(
+    betOptions(500).map((o) => o.label),
+    ['10% · 50', '25% · 125', '50% · 250', 'Ва-банк · 500']
+  );
+  assert.strictEqual(betOptions(500).at(-1).allIn, true);
+});
+
+test('маленький баланс: без повторов, ва-банк всегда есть, при нуле ставок нет', () => {
+  assert.deepStrictEqual(
+    betOptions(6).map((o) => o.amount),
+    [1, 2, 3, 6]
+  );
+  assert.deepStrictEqual(
+    betOptions(2).map((o) => o.label),
+    ['10% · 1', 'Ва-банк · 2']
+  );
+  assert.deepStrictEqual(
+    betOptions(1).map((o) => o.label),
+    ['Ва-банк · 1']
+  );
+  assert.deepStrictEqual(betOptions(0), []);
+  assert.deepStrictEqual(betOptions('мусор'), []);
 });

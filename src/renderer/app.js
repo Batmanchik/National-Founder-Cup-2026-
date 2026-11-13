@@ -3,7 +3,7 @@
   'use strict';
   const $ = (id) => document.getElementById(id);
   const api = window.nazar;
-  const { pick, fmtMin, fmtClock, fmtTenge, times } = NazarUtil;
+  const { pick, clamp, fmtMin, fmtClock, fmtTenge, times, betOptions } = NazarUtil;
 
   const buddyEl = $('buddy');
   const buddy = new Buddy(buddyEl, $('buddy-canvas'));
@@ -381,14 +381,7 @@
     $('vision').disabled = !(state && state.ai);
     $('vision').checked = Boolean(state && state.vision);
     $('strict').checked = Boolean(state && state.strictDefault);
-    // Ставить можно только то, что есть.
-    const xp = (state && state.profile && state.profile.xp) || 0;
-    $('bet-balance').textContent = `· у тебя ${xp} баллов`;
-    [...$('bet').children].forEach((b) => {
-      b.disabled = Number(b.dataset.bet) > xp;
-      if (b.disabled && Number(b.dataset.bet) === bet) bet = 0;
-    });
-    [...$('bet').children].forEach((x) => x.classList.toggle('active', Number(x.dataset.bet) === bet));
+    renderBet();
     $('ai-hint').textContent =
       state && state.ai ? `ИИ: ${state.model}` : 'Офлайн-режим: добавь ANTHROPIC_API_KEY в .env, чтобы включить ИИ-чат и зрение.';
     if (state && !state.trackingSupported)
@@ -401,11 +394,49 @@
     minutes = Number(b.dataset.min);
     [...$('minutes').children].forEach((x) => x.classList.toggle('active', x === b));
   });
+  // ---------- Ставка на себя ----------
+  // Готовые варианты — доли баланса (10/25/50%/ва-банк), плюс поле для любой суммы до баланса.
+  const balance = () => (state && state.profile && state.profile.xp) || 0;
+  function renderBet() {
+    const xp = balance();
+    bet = Math.min(bet, xp);
+    $('bet-balance').textContent = `· у тебя ${xp} баллов`;
+    const box = $('bet');
+    box.innerHTML = '';
+    const opts = [{ amount: 0, label: 'нет' }, ...betOptions(xp)];
+    for (const o of opts) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.dataset.bet = String(o.amount);
+      btn.textContent = o.label;
+      if (o.allIn) btn.classList.add('all-in');
+      box.appendChild(btn);
+    }
+    $('bet-amount').max = String(xp);
+    $('bet-amount').disabled = xp === 0;
+    syncBet();
+  }
+  function syncBet() {
+    const xp = balance();
+    [...$('bet').children].forEach((x) => x.classList.toggle('active', Number(x.dataset.bet) === bet));
+    const hint = $('bet-hint');
+    if (!xp) hint.textContent = 'Заработай баллы в первых сессиях — тогда сможешь поставить их на себя.';
+    else if (!bet) hint.textContent = 'Держишь фокус 80%+ до конца таймера — ставка удваивается. Нет — баллы сгорают.';
+    else hint.textContent = `Фокус 80%+ до конца: +${bet}, будет ${xp + bet}. Сорвёшься: −${bet}, останется ${xp - bet}.`;
+  }
   $('bet').addEventListener('click', (e) => {
     const b = e.target.closest('button');
-    if (!b || b.disabled) return;
+    if (!b) return;
     bet = Number(b.dataset.bet);
-    [...$('bet').children].forEach((x) => x.classList.toggle('active', x === b));
+    $('bet-amount').value = '';
+    syncBet();
+  });
+  $('bet-amount').addEventListener('input', () => {
+    const xp = balance();
+    const raw = $('bet-amount').value;
+    bet = raw === '' ? 0 : clamp(raw, 0, xp, 0);
+    if (raw !== '' && Number(raw) > xp) $('bet-amount').value = String(xp); // больше баланса поставить нельзя
+    syncBet();
   });
   async function start() {
     const goal = $('goal').value.trim();

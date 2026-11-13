@@ -2,7 +2,7 @@
 // С ключом ANTHROPIC_API_KEY использует Claude: чат с действиями, оценку окна, анализ скриншота, вывод по сессии.
 // Без ключа работает офлайн на шаблонах, поэтому демо не ломается без интернета.
 const Anthropic = require('@anthropic-ai/sdk').default;
-const { clamp, pick, fmtMin, fmtTenge, minutesAcc } = require('../shared/util');
+const { clamp, pick, fmtMin, fmtTenge, minutesAcc, points } = require('../shared/util');
 const { TIPS, setCustomLines } = require('./lines');
 
 let MODEL = process.env.NAZAR_MODEL || 'claude-opus-5-5';
@@ -120,7 +120,7 @@ function contextText(ctx) {
     lines.push(
       `Прошло ${fmtMin(l.elapsedSec)} из ${l.plannedMin} мин. Фокус ${l.focusScore}%. ` +
         `По делу ${fmtMin(l.totals.focus)}, отвлечения ${fmtMin(l.totals.distraction)}.` +
-        (l.bet ? ` Человек поставил ${l.bet.stake} баллов, что удержит фокус ${l.bet.target}%+ до конца таймера.` : '') +
+        (l.bet ? ` Человек поставил ${points(l.bet.stake)}, что удержит фокус ${l.bet.target}%+ до конца таймера.` : '') +
         (l.onBreak
           ? ' Сейчас перерыв.'
           : ` С прошлого перерыва ${l.focusSinceBreakMin} мин фокуса, заработано ${l.breakEarnedMin} мин отдыха.`)
@@ -193,8 +193,8 @@ function offlineChat(text, ctx) {
     const bet = !l.bet
       ? ''
       : l.bet.onTrack
-        ? ` 🎲 Ставка ${l.bet.stake} баллов пока в силе.`
-        : ` 🎲 Ставка ${l.bet.stake} баллов горит: нужно ${l.bet.target}%!`;
+        ? ` 🎲 Ставка ${points(l.bet.stake)} пока в силе.`
+        : ` 🎲 Ставка ${points(l.bet.stake)} горит: нужно ${l.bet.target}%!`;
     return {
       reply: `Фокус ${l.focusScore}%: по делу ${fmtMin(l.totals.focus)}, отвлечения ${fmtMin(l.totals.distraction)}.${cmp}${bet}`,
       action: 'none',

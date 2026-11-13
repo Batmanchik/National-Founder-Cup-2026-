@@ -176,9 +176,11 @@ test('ставка сгорает: раньше таймера, низкий ф�
   assert.strictEqual(gaveUp.betResult(25 * 60_000).reason, 'surrendered');
 });
 
-test('без ставки и с недопустимой ставкой — ничего не разыгрывается', () => {
+test('ставка — любое целое число, мусор превращается в 0', () => {
   assert.strictEqual(new Session({ goal: 'код', minutes: 25, now: 0 }).summary(0).bet, null);
-  assert.strictEqual(new Session({ goal: 'код', minutes: 25, bet: 777, now: 0 }).bet, 0);
+  assert.strictEqual(new Session({ goal: 'код', minutes: 25, bet: -5, now: 0 }).bet, 0);
+  assert.strictEqual(new Session({ goal: 'код', minutes: 25, bet: 'много', now: 0 }).bet, 0);
+  assert.strictEqual(new Session({ goal: 'код', minutes: 25, bet: 777.9, now: 0 }).bet, 777, 'любая сумма, целым числом');
 });
 
 test('Акыл предупреждает, когда ставка горит, и не спамит', () => {
