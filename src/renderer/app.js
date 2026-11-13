@@ -376,16 +376,21 @@
     bubble.hidden = true;
     const p = panels.onboarding;
     p.hidden = false;
-    p.style.left = `${Math.max(16, Math.min(window.innerWidth - 360, buddy.x))}px`;
-    p.style.top = `${Math.max(16, buddy.ground() - p.offsetHeight - 30)}px`;
     $('vision').disabled = !(state && state.ai);
     $('vision').checked = Boolean(state && state.vision);
+    $('vision-row').title = state && state.ai ? VISION_TIP : `${VISION_TIP} Нужен ключ Claude в окне Nazar.`;
     $('strict').checked = Boolean(state && state.strictDefault);
     renderBet();
-    $('ai-hint').textContent =
-      state && state.ai ? `ИИ: ${state.model}` : 'Офлайн-режим: добавь ANTHROPIC_API_KEY в .env, чтобы включить ИИ-чат и зрение.';
-    if (state && !state.trackingSupported)
-      $('ai-hint').textContent += ' Отслеживание окон недоступно на этой системе — используй демо-режим в трее.';
+    setBetOpen(bet > 0); // ставка раскрыта, только если уже выбрана
+    // Техническая строка внизу — коротко; подробности в окне Nazar.
+    const foot = [state && state.ai ? `ИИ: ${state.model}` : 'офлайн-режим: ключ Claude — в окне Nazar'];
+    if (state && !state.trackingSupported) foot.push('окна не отслеживаются, демо — в трее');
+    $('ai-hint').textContent = foot.join(' · ');
+    renderSummary();
+    // Привязка к низу: когда раскрывается ставка, окно растёт вверх, а кнопка «Погнали» остаётся на месте.
+    p.style.left = `${Math.max(16, Math.min(window.innerWidth - 350, buddy.x))}px`;
+    p.style.top = 'auto';
+    p.style.bottom = `${Math.max(16, window.innerHeight - buddy.ground() + 30)}px`;
     setTimeout(() => $('goal').focus(), 50);
   }
   $('minutes').addEventListener('click', (e) => {
@@ -400,7 +405,6 @@
   function renderBet() {
     const xp = balance();
     bet = Math.min(bet, xp);
-    $('bet-balance').textContent = `· у тебя ${xp} баллов`;
     const box = $('bet');
     box.innerHTML = '';
     const opts = [{ amount: 0, label: 'нет' }, ...betOptions(xp)];
@@ -419,11 +423,28 @@
   function syncBet() {
     const xp = balance();
     [...$('bet').children].forEach((x) => x.classList.toggle('active', Number(x.dataset.bet) === bet));
-    const hint = $('bet-hint');
-    if (!xp) hint.textContent = 'Заработай баллы в первых сессиях — тогда сможешь поставить их на себя.';
-    else if (!bet) hint.textContent = 'Держишь фокус 80%+ до конца таймера — ставка удваивается. Нет — баллы сгорают.';
-    else hint.textContent = `Фокус 80%+ до конца: +${bet}, будет ${xp + bet}. Сорвёшься: −${bet}, останется ${xp - bet}.`;
+    $('bet-balance').textContent = xp ? `у тебя ${xp}` : 'баллы появятся после первых сессий';
+    $('opt-bet-label').textContent = bet ? String(bet) : 'Ставка';
+    $('opt-bet').classList.toggle('on', bet > 0);
+    renderSummary();
   }
+  function setBetOpen(open) {
+    $('bet-box').hidden = !open;
+    $('opt-bet').setAttribute('aria-expanded', String(open));
+  }
+  $('opt-bet').addEventListener('click', () => setBetOpen($('bet-box').hidden));
+
+  // Одна строка-итог вместо абзацев: что включено и что на кону.
+  const VISION_TIP = 'Раз в ~45 сек ИИ смотрит на скриншот, чтобы точнее понять, работаешь ли ты. Скриншоты не сохраняются.';
+  function renderSummary() {
+    const parts = [];
+    if (bet) parts.push(`🎲 фокус 80%+ до конца: +${bet}, сорвёшься: −${bet}`);
+    if ($('strict').checked) parts.push('🔒 не выключить до конца');
+    if ($('vision').checked) parts.push('👁 ИИ смотрит на экран');
+    $('onb-summary').textContent = parts.length ? parts.join(' · ') : 'Сначала цель, потом лента.';
+  }
+  $('strict').addEventListener('change', renderSummary);
+  $('vision').addEventListener('change', renderSummary);
   $('bet').addEventListener('click', (e) => {
     const b = e.target.closest('button');
     if (!b) return;

@@ -34,39 +34,55 @@
 
     <!-- Старт сессии -->
     <section id="onboarding" class="panel interactive" hidden>
-      <h1>NAZAR</h1>
-      <p class="sub">Сначала цель, потом лента.</p>
-      <label for="goal">Над чем работаем?</label>
-      <input id="goal" type="text" maxlength="120" placeholder="Например: дописать курсовую по физике" autocomplete="off" />
-      <div class="label">Сколько минут?</div>
-      <div class="chips" id="minutes">
-        <button data-min="15">15</button>
-        <button data-min="25" class="active">25</button>
-        <button data-min="50">50</button>
-        <button data-min="90">90</button>
+      <header class="onb-head">
+        <h1>NAZAR</h1>
+        <button id="onb-close" type="button" class="icon" title="Позже" aria-label="Закрыть">✕</button>
+      </header>
+      <input id="goal" type="text" maxlength="120" placeholder="Над чем работаем?" aria-label="Цель сессии" autocomplete="off" />
+      <div class="chips" id="minutes" role="group" aria-label="Длительность, минут">
+        <button type="button" data-min="15">15</button>
+        <button type="button" data-min="25" class="active">25</button>
+        <button type="button" data-min="50">50</button>
+        <button type="button" data-min="90">90</button>
+        <span class="unit">мин</span>
       </div>
-      <div class="label">🎲 Ставка на себя <small id="bet-balance"></small></div>
-      <div class="chips" id="bet"></div>
-      <div class="bet-custom">
-        <label for="bet-amount">или своя ставка</label>
-        <input id="bet-amount" type="number" min="1" step="1" inputmode="numeric" placeholder="сколько угодно" />
-      </div>
-      <p class="hint" id="bet-hint"></p>
-      <label class="toggle" id="vision-row">
-        <input type="checkbox" id="vision" />
-        <span
-          >Зрение: раз в ~45 сек ИИ смотрит на скриншот экрана, чтобы точнее понять, работаешь ли ты. Скриншоты нигде не сохраняются.</span
+
+      <!-- Опции одной строкой; пояснения — в подсказках при наведении -->
+      <div class="opts">
+        <button
+          id="opt-bet"
+          type="button"
+          class="opt"
+          aria-expanded="false"
+          aria-controls="bet-box"
+          title="Поставь баллы, что удержишь фокус 80%+ до конца таймера. Выиграл — ставка ×2, сорвался — сгорает."
         >
-      </label>
-      <label class="toggle">
-        <input type="checkbox" id="strict" />
-        <span>🔒 Блокировка выключения: до конца таймера Акыла не выключить и не закрыть. Выход только один — честно сдаться.</span>
-      </label>
-      <p class="hint" id="ai-hint"></p>
-      <div class="row">
-        <button id="start" class="primary">Погнали ▶</button>
-        <button id="onb-close" class="ghost">Позже</button>
+          🎲 <span id="opt-bet-label">Ставка</span>
+        </button>
+        <label class="opt" title="До конца таймера Акыла не выключить и не закрыть. Выход один — написать «я сдаюсь».">
+          <input type="checkbox" id="strict" /> 🔒 Блок
+        </label>
+        <label
+          class="opt"
+          id="vision-row"
+          title="Раз в ~45 сек ИИ смотрит на скриншот, чтобы точнее понять, работаешь ли ты. Скриншоты не сохраняются."
+        >
+          <input type="checkbox" id="vision" /> 👁 Зрение
+        </label>
       </div>
+
+      <div id="bet-box" class="bet-box" hidden>
+        <div class="bet-top"><span>Ставка на себя</span><small id="bet-balance"></small></div>
+        <div class="chips" id="bet" role="group" aria-label="Ставка"></div>
+        <div class="bet-custom">
+          <label for="bet-amount">своя</label>
+          <input id="bet-amount" type="number" min="1" step="1" inputmode="numeric" placeholder="сумма" />
+        </div>
+      </div>
+
+      <p class="summary" id="onb-summary" aria-live="polite"></p>
+      <button id="start" type="button" class="primary go">Погнали ▶</button>
+      <p class="foot" id="ai-hint"></p>
     </section>
 
     <!-- Чат с ментором -->
