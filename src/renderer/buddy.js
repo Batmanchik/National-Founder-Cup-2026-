@@ -9,7 +9,7 @@
 (function () {
   'use strict';
   const S = NazarSprites;
-  const SIZES = { small: 2, medium: 3, large: 4 }; // спрайт 24×30: 48×60, 72×90, 96×120 px
+  const SIZES = { small: 3, medium: 4, large: 5 }; // спрайт 16×19: 48×57, 64×76, 80×95 px
   const GROUND_GAP = 18; // место под HUD
 
   const cache = new Map();
