@@ -1,37 +1,28 @@
-// Пиксельный спрайт ментора «Акыл», 24×30 пикселей.
-// Кадр собирается слоями: тело → глаза → рот → капля пота → руки (и предметы) → ноги.
-// Слои рисуют только заливку; чёрный контур вокруг фигуры строится автоматически в конце,
-// поэтому новые позы и предметы сразу получают аккуратную обводку.
+// Пиксельный спрайт ментора «Акыл».
+// Спрайт 16x19 пикселей описан строками: каждый символ = цвет из PALETTE ('.' = прозрачный).
+// Кадры собираются из базового тела + «накладок» (глаза, рот, руки, ноги),
+// поэтому новые эмоции добавляются заменой 1–3 строк.
 // Файл работает и в Node (main-процесс, тесты), и в браузере (renderer).
 (function (root) {
   'use strict';
 
-  const WIDTH = 24;
-  const HEIGHT = 30;
-  const HEAD_ROWS = 15; // голова с волосами — для иконки в трее
+  const WIDTH = 16;
+  const HEIGHT = 19;
 
   const PALETTE = {
     o: '#1a1c2c', // контур
     h: '#3b2a26', // волосы
-    H: '#5c4036', // блик на волосах
     s: '#f4c7a1', // кожа
     S: '#d9a07a', // тень кожи
-    e: '#1a1c2c', // зрачки и брови
-    i: '#ffffff', // блик в глазах
+    e: '#1a1c2c', // глаза
     r: '#f08f8f', // румянец
     m: '#8c3a3a', // рот
-    t: '#e0606a', // язык
     c: '#2ec4b6', // худи
-    L: '#6fe3d8', // свет на худи
     C: '#1d8a80', // тень худи
-    n: '#f4f4e8', // шнурки
-    y: '#ffd166', // логотип и наконечники шнурков
+    y: '#ffd166', // логотип на худи
     p: '#3b4a7a', // штаны
-    P: '#2a355c', // тень штанов
     b: '#22223b', // кеды
-    q: '#e8e8e8', // подошва
     d: '#6ec6ff', // капля пота
-    D: '#c9ecff', // блик капли
     g: '#9aa5b1', // крышка ноутбука
     k: '#5c6670', // клавиатура
     w: '#e8f1f2', // логотип на крышке
@@ -39,375 +30,183 @@
     W: '#fff8e7', // страницы
   };
 
-  // ---------- Рисовалка ----------
-  function canvas() {
-    return Array.from({ length: HEIGHT }, () => Array(WIDTH).fill('.'));
-  }
-  const inside = (x, y) => x >= 0 && y >= 0 && x < WIDTH && y < HEIGHT;
-  function px(g, x, y, c) {
-    if (inside(x, y)) g[y][x] = c;
-  }
-  function rect(g, x, y, w, h, c) {
-    for (let j = 0; j < h; j++) for (let k = 0; k < w; k++) px(g, x + k, y + j, c);
-  }
-  function hline(g, x1, x2, y, c) {
-    for (let x = x1; x <= x2; x++) px(g, x, y, c);
-  }
-  // Зеркально по вертикальной оси (для симметричных деталей).
-  const mx = (x) => WIDTH - 1 - x;
-  function mirrorPx(g, x, y, c) {
-    px(g, x, y, c);
-    px(g, mx(x), y, c);
-  }
-  function mirrorRect(g, x, y, w, h, c) {
-    rect(g, x, y, w, h, c);
-    rect(g, mx(x + w - 1), y, w, h, c);
-  }
-  function clear(g, x, y, w, h) {
-    rect(g, x, y, w, h, '.');
+  // R('2.', 'o', '10c') -> '..occcccccccccc': число перед символом = сколько раз повторить.
+  function R(...parts) {
+    return parts
+      .map((p) => {
+        const m = /^(\d+)(.)$/.exec(p);
+        return m ? m[2].repeat(Number(m[1])) : p;
+      })
+      .join('');
   }
 
-  // Контур: каждая пустая клетка рядом с заливкой (по 4 соседям) становится чёрной.
-  function outline(g) {
-    const out = g.map((row) => row.slice());
-    for (let y = 0; y < HEIGHT; y++)
-      for (let x = 0; x < WIDTH; x++) {
-        if (g[y][x] !== '.') continue;
-        const near = [
-          [1, 0],
-          [-1, 0],
-          [0, 1],
-          [0, -1],
-        ].some(([dx, dy]) => inside(x + dx, y + dy) && g[y + dy][x + dx] !== '.' && g[y + dy][x + dx] !== 'o');
-        if (near) out[y][x] = 'o';
-      }
-    return out;
-  }
-
-  // ---------- Тело ----------
-  function body(g) {
-    // Волосы: макушка, чёлка, виски
-    hline(g, 8, 15, 1, 'h');
-    hline(g, 6, 17, 2, 'h');
-    rect(g, 5, 3, 14, 2, 'h');
-    hline(g, 9, 12, 2, 'H'); // блик на макушке
-    hline(g, 7, 8, 3, 'H');
-    // Лицо
-    rect(g, 6, 5, 12, 8, 's');
-    hline(g, 7, 16, 12, 's');
-    hline(g, 8, 15, 13, 'S'); // подбородок в тени
-    // Чёлка: сплошная, с «прядками» вниз
-    hline(g, 6, 17, 5, 'h');
-    px(g, 7, 6, 'h');
-    px(g, 15, 6, 'h');
-    px(g, 16, 6, 'h');
-    // Виски и уши
-    mirrorRect(g, 5, 5, 1, 3, 'h');
-    mirrorRect(g, 5, 8, 1, 2, 's');
-    mirrorPx(g, 5, 9, 'S');
-    // Тень под чёлкой
-    hline(g, 8, 14, 6, 'S');
-    // Румянец
-    hline(g, 7, 8, 10, 'r');
-    hline(g, 15, 16, 10, 'r');
-
-    // Худи: капюшон-воротник, корпус, свет слева и тень справа
-    hline(g, 7, 16, 14, 'C');
-    rect(g, 5, 15, 14, 8, 'c');
-    rect(g, 4, 15, 1, 2, 'c'); // плечи — к ним крепятся рукава
-    rect(g, 19, 15, 1, 2, 'c');
-    rect(g, 6, 15, 1, 7, 'L');
-    rect(g, 17, 15, 1, 8, 'C');
-    hline(g, 5, 18, 23, 'C'); // резинка внизу
-    // Шнурки капюшона
-    rect(g, 10, 15, 1, 3, 'n');
-    rect(g, 13, 15, 1, 3, 'n');
-    px(g, 10, 18, 'y');
-    px(g, 13, 18, 'y');
-    // Карман-кенгуру
-    hline(g, 8, 15, 20, 'C');
-    rect(g, 8, 21, 1, 2, 'C');
-    rect(g, 15, 21, 1, 2, 'C');
-
-    // Руки по швам (их заменяют варианты рук)
-    armsDown(g);
-
-    // Штаны
-    hline(g, 7, 16, 24, 'p');
-    rect(g, 7, 25, 4, 2, 'p');
-    rect(g, 13, 25, 4, 2, 'p');
-    rect(g, 7, 24, 1, 3, 'P');
-    rect(g, 13, 25, 1, 2, 'P');
-    // Кеды с белой подошвой
-    rect(g, 6, 27, 5, 1, 'b');
-    rect(g, 13, 27, 5, 1, 'b');
-    hline(g, 6, 10, 28, 'q');
-    hline(g, 13, 17, 28, 'q');
-  }
-
-  // ---------- Руки ----------
-  // Рукав отстоит от туловища на пиксель — между ними автоматически ложится контур.
-  function sleeve(g, x, y, h, side) {
-    rect(g, x, y, 2, h, 'c');
-    rect(g, side < 0 ? x : x + 1, y, 1, h, 'C'); // наружная сторона в тени
-  }
-  function armsDown(g) {
-    sleeve(g, 2, 16, 6, -1);
-    sleeve(g, 20, 16, 6, 1);
-    hline(g, 2, 3, 15, 'c');
-    hline(g, 20, 21, 15, 'c');
-    hline(g, 2, 3, 21, 'C');
-    hline(g, 20, 21, 21, 'C');
-    rect(g, 2, 22, 2, 2, 's');
-    rect(g, 20, 22, 2, 2, 's');
-  }
-  function clearArms(g) {
-    clear(g, 0, 7, 4, 17);
-    clear(g, 20, 7, 4, 17);
-  }
-  function armUp(g, side, handX) {
-    const x = side < 0 ? 2 : 20;
-    rect(g, x, 10, 2, 5, 'c');
-    rect(g, side < 0 ? x : x + 1, 10, 1, 5, 'C');
-    hline(g, x, x + 1, 10, 'C');
-    rect(g, handX, 8, 2, 2, 's');
-  }
-  function armDownOne(g, side) {
-    const x = side < 0 ? 2 : 20;
-    sleeve(g, x, 16, 6, side);
-    hline(g, x, x + 1, 15, 'c');
-    hline(g, x, x + 1, 21, 'C');
-    rect(g, x, 22, 2, 2, 's');
-  }
-  function fists(g, raise) {
-    // Согнутые руки, кулаки у плеч
-    for (const side of [-1, 1]) {
-      const x = side < 0 ? 2 : 20;
-      rect(g, x, 14, 2, 4, 'c');
-      rect(g, side < 0 ? x : x + 1, 14, 1, 4, 'C');
-      const fx = side < 0 ? (raise ? 1 : 2) : raise ? 21 : 20;
-      rect(g, fx, raise ? 11 : 12, 2, 2, 's');
-      px(g, side < 0 ? fx + 1 : fx, raise ? 12 : 13, 'S');
-    }
-  }
-  function sideArmsTo(g, handY, handInset) {
-    // Рукава к предмету в руках
-    for (const side of [-1, 1]) {
-      const x = side < 0 ? 4 : 18;
-      rect(g, x, 15, 2, handY - 15, 'c');
-      rect(g, side < 0 ? x : x + 1, 15, 1, handY - 15, 'C');
-      const hx = side < 0 ? 4 + handInset : 18 - handInset;
-      rect(g, hx, handY, 2, 2, 's');
-    }
-  }
-  function laptop(g, typing) {
-    rect(g, 7, 17, 10, 5, 'g');
-    hline(g, 7, 16, 17, 'k'); // верхний край крышки
-    rect(g, 11, 18, 2, 2, 'w');
-    hline(g, 6, 17, 22, 'k');
-    if (typing) {
-      rect(g, 7, 21, 2, 2, 's');
-      rect(g, 15, 21, 2, 2, 's');
-      sideArmsTo(g, 21, 3);
-      rect(g, 4, 21, 3, 2, '.');
-      rect(g, 17, 21, 3, 2, '.');
-      rect(g, 6, 20, 2, 1, 'c');
-      rect(g, 16, 20, 2, 1, 'c');
-    } else {
-      sideArmsTo(g, 19, 1);
-    }
-  }
-  function book(g) {
-    rect(g, 7, 17, 10, 6, 'B');
-    rect(g, 11, 17, 2, 6, 'W');
-    hline(g, 8, 10, 18, 'W');
-    hline(g, 13, 15, 18, 'W');
-    hline(g, 8, 10, 20, 'W');
-    hline(g, 13, 15, 20, 'W');
-    sideArmsTo(g, 19, 1);
-  }
-
-  // ---------- Части-варианты ----------
-  const eyeAt = (g, x, y, h = 3, shine = true) => {
-    rect(g, x, y, 2, h, 'e');
-    if (shine) px(g, x, y, 'i');
-  };
+  const BASE = [
+    R('4.', '8o', '4.'), // 0  макушка
+    R('3.', 'o', '8h', 'o', '3.'), // 1
+    R('2.', 'o', '10h', 'o', '2.'), // 2
+    R('2.', 'o', '10h', 'o', '2.'), // 3
+    R('2.', 'o', 'h', '8s', 'h', 'o', '2.'), // 4  лоб
+    R('2.', 'o', '2s', 'e', '4s', 'e', '2s', 'o', '2.'), // 5  глаза
+    R('2.', 'o', '2s', 'e', '4s', 'e', '2s', 'o', '2.'), // 6  глаза
+    R('2.', 'o', 's', 'r', '6s', 'r', 's', 'o', '2.'), // 7  щёки
+    R('2.', 'o', '4s', '2m', '4s', 'o', '2.'), // 8  рот
+    R('3.', 'o', '8S', 'o', '3.'), // 9  подбородок
+    R('2.', 'o', '10c', 'o', '2.'), // 10 воротник
+    R('.', 'o', '12c', 'o', '.'), // 11 плечи
+    R('.', 'o', 'c', 'C', '8c', 'C', 'c', 'o', '.'), // 12
+    R('.', 'o', 'c', 'C', '2c', '4y', '2c', 'C', 'c', 'o', '.'), // 13 логотип
+    R('.', 'o', 's', 'C', '8c', 'C', 's', 'o', '.'), // 14 кисти
+    R('2.', 'o', 'C', '8c', 'C', 'o', '2.'), // 15
+    R('3.', 'o', '8p', 'o', '3.'), // 16 штаны
+    R('3.', 'o', '3p', '2o', '3p', 'o', '3.'), // 17 ноги
+    R('2.', 'o', '3b', 'o', '2.', 'o', '3b', 'o', '2.'), // 18 кеды
+  ];
 
   const PARTS = {
     eyes: {
-      open: (g) => {
-        eyeAt(g, 8, 7);
-        eyeAt(g, 14, 7);
+      open: {},
+      blink: {
+        5: R('2.', 'o', '10s', 'o', '2.'),
+        6: R('2.', 'o', '2s', '2e', '2s', '2e', '2s', 'o', '2.'),
       },
-      blink: (g) => {
-        hline(g, 8, 9, 9, 'e');
-        hline(g, 14, 15, 9, 'e');
+      // Взгляд в сторону (по кадру, до отражения)
+      left: {
+        5: R('2.', 'o', 's', 'e', '4s', 'e', '3s', 'o', '2.'),
+        6: R('2.', 'o', 's', 'e', '4s', 'e', '3s', 'o', '2.'),
       },
-      left: (g) => {
-        eyeAt(g, 7, 7);
-        eyeAt(g, 13, 7);
-      },
-      right: (g) => {
-        eyeAt(g, 9, 7);
-        eyeAt(g, 15, 7);
+      right: {
+        5: R('2.', 'o', '3s', 'e', '4s', 'e', 's', 'o', '2.'),
+        6: R('2.', 'o', '3s', 'e', '4s', 'e', 's', 'o', '2.'),
       },
       // Глаза-дуги ^^
-      happy: (g) => {
-        hline(g, 8, 9, 8, 'e');
-        hline(g, 14, 15, 8, 'e');
-        px(g, 7, 9, 'e');
-        px(g, 10, 9, 'e');
-        px(g, 13, 9, 'e');
-        px(g, 16, 9, 'e');
-        hline(g, 6, 7, 10, 'r');
-        hline(g, 16, 17, 10, 'r');
-        hline(g, 8, 8, 10, 's');
-        hline(g, 15, 15, 10, 's');
+      happy: {
+        5: R('2.', 'o', '2s', 'e', '4s', 'e', '2s', 'o', '2.'),
+        6: R('2.', 'o', 's', 'e', 's', 'e', '2s', 'e', 's', 'e', 's', 'o', '2.'),
+        7: R('2.', 'o', 'r', '8s', 'r', 'o', '2.'), // румянец отходит в стороны, чтобы ^^ читались
+      },
+      // Злой: брови сведены к переносице (строки 4–5), румянец во всю щёку
+      angry: {
+        4: R('2.', 'o', 'h', 's', 'e', '4s', 'e', 's', 'h', 'o', '2.'),
+        5: R('2.', 'o', '2s', '2e', '2s', '2e', '2s', 'o', '2.'),
+        7: R('2.', 'o', '2r', '6s', '2r', 'o', '2.'),
       },
       // Смотрит вниз, в ноутбук или книгу
-      down: (g) => {
-        eyeAt(g, 8, 8, 2, false);
-        eyeAt(g, 14, 8, 2, false);
-        hline(g, 8, 9, 7, 'S'); // веки
-        hline(g, 14, 15, 7, 'S');
-      },
-      // Злой: брови к переносице, прищур, румянец во всю щёку
-      angry: (g) => {
-        px(g, 7, 6, 'e');
-        hline(g, 8, 9, 7, 'e');
-        px(g, 10, 8, 'e');
-        px(g, 16, 6, 'e');
-        hline(g, 14, 15, 7, 'e');
-        px(g, 13, 8, 'e');
-        eyeAt(g, 8, 8, 2);
-        eyeAt(g, 14, 8, 2);
-        hline(g, 6, 9, 10, 'r');
-        hline(g, 14, 17, 10, 'r');
+      down: {
+        5: R('2.', 'o', '10s', 'o', '2.'),
       },
     },
     mouth: {
-      neutral: (g) => hline(g, 11, 12, 11, 'm'),
-      talk: (g) => {
-        rect(g, 10, 11, 4, 2, 'm');
-        hline(g, 11, 12, 12, 't');
+      neutral: {},
+      talk: {
+        8: R('2.', 'o', '4s', '2m', '4s', 'o', '2.'),
+        9: R('3.', 'o', '3S', '2m', '3S', 'o', '3.'),
       },
-      smile: (g) => {
-        hline(g, 10, 13, 11, 'm');
-        px(g, 9, 10, 'm');
-        px(g, 14, 10, 'm');
+      smile: {
+        8: R('2.', 'o', '3s', '4m', '3s', 'o', '2.'),
+        9: R('3.', 'o', '2S', '4m', '2S', 'o', '3.'),
       },
-      worried: (g) => {
-        hline(g, 11, 12, 11, 'm');
-        px(g, 10, 12, 'm');
-        px(g, 13, 12, 'm');
+      worried: {
+        8: R('2.', 'o', '3s', 'm', '2s', 'm', '3s', 'o', '2.'),
       },
-      yawn: (g) => {
-        rect(g, 11, 11, 2, 3, 'm');
-        px(g, 11, 13, 't');
-        px(g, 12, 13, 't');
+      // Кричит (два кадра: рот открыт / сжат)
+      shout: {
+        8: R('2.', 'o', '3s', '4m', '3s', 'o', '2.'),
+        9: R('3.', 'o', '2S', '4m', '2S', 'o', '3.'),
       },
-      shout: (g) => {
-        rect(g, 10, 11, 4, 3, 'm');
-        hline(g, 11, 12, 13, 't');
+      // Мат запикан: рот закрыт чёрной цензурной полоской во всю ширину лица
+      censor: {
+        8: R('2.', 'o', 's', '8o', 's', 'o', '2.'),
+        9: R('3.', 'o', '8S', 'o', '3.'),
       },
-      frown: (g) => {
-        hline(g, 10, 13, 11, 'm');
-        px(g, 9, 12, 'm');
-        px(g, 14, 12, 'm');
+      frown: {
+        8: R('2.', 'o', '3s', 'm', '2s', 'm', '3s', 'o', '2.'),
+        9: R('3.', 'o', '2S', '4m', '2S', 'o', '3.'),
       },
-      // Мат запикан: рот закрыт чёрной цензурной полоской
-      censor: (g) => rect(g, 8, 11, 8, 2, 'o'),
+      yawn: {
+        8: R('2.', 'o', '4s', '2m', '4s', 'o', '2.'),
+        9: R('3.', 'o', '3S', '2m', '3S', 'o', '3.'),
+        7: R('2.', 'o', 's', 'r', '2s', '2m', '2s', 'r', 's', 'o', '2.'),
+      },
     },
     sweat: {
-      no: () => {},
-      yes: (g) => {
-        px(g, 21, 4, 'd');
-        rect(g, 20, 5, 2, 2, 'd');
-        px(g, 20, 5, 'D');
-      },
+      no: {},
+      yes: { 3: R('2.', 'o', '10h', 'o', 'd', '.') },
     },
     arms: {
-      down: () => {},
-      up: (g) => {
-        clearArms(g);
-        armUp(g, -1, 2);
-        armUp(g, 1, 20);
-      },
-      // Машет правой рукой (два кадра)
-      wave: (g) => {
-        clearArms(g);
-        armDownOne(g, -1);
-        armUp(g, 1, 21);
-      },
-      wave2: (g) => {
-        clearArms(g);
-        armDownOne(g, -1);
-        armUp(g, 1, 20);
+      down: {},
+      up: {
+        9: R('s', '2.', 'o', '8S', 'o', '2.', 's'),
+        10: R('.', 'c', 'o', '10c', 'o', 'c', '.'),
+        14: R('.', 'o', 'c', 'C', '8c', 'C', 'c', 'o', '.'),
       },
       // Трясёт кулаками (два кадра)
-      fist: (g) => {
-        clearArms(g);
-        fists(g, true);
+      fist: {
+        9: R('.', 's', '.', 'o', '8S', 'o', '.', 's', '.'),
+        10: R('.', 'c', 'o', '10c', 'o', 'c', '.'),
+        14: R('.', 'o', 'c', 'C', '8c', 'C', 'c', 'o', '.'),
       },
-      fist2: (g) => {
-        clearArms(g);
-        fists(g, false);
+      fist2: {
+        10: R('s', 'c', 'o', '10c', 'o', 'c', 's'),
+        14: R('.', 'o', 'c', 'C', '8c', 'C', 'c', 'o', '.'),
       },
-      // Держит ноутбук / печатает
-      laptop: (g) => {
-        clearArms(g);
-        laptop(g, false);
+      // Машет правой рукой (два кадра)
+      wave: {
+        9: R('3.', 'o', '8S', 'o', '2.', 's'),
+        10: R('2.', 'o', '10c', 'o', 'c', '.'),
+        14: R('.', 'o', 's', 'C', '8c', 'C', 'c', 'o', '.'),
       },
-      laptop2: (g) => {
-        clearArms(g);
-        laptop(g, true);
+      wave2: {
+        9: R('3.', 'o', '8S', 'o', '.', 's', '.'),
+        10: R('2.', 'o', '10c', 'o', 'c', '.'),
+        14: R('.', 'o', 's', 'C', '8c', 'C', 'c', 'o', '.'),
       },
-      book: (g) => {
-        clearArms(g);
-        book(g);
+      // Держит ноутбук и печатает (два кадра: руки на крышке / на клавиатуре)
+      laptop: {
+        13: R('.', 'o', 's', '4g', '2w', '4g', 's', 'o', '.'),
+        14: R('.', 'o', 'c', '10g', 'c', 'o', '.'),
+        15: R('2.', 'o', '10k', 'o', '2.'),
+      },
+      laptop2: {
+        13: R('.', 'o', 'c', '4g', '2w', '4g', 'c', 'o', '.'),
+        14: R('.', 'o', 's', '10g', 's', 'o', '.'),
+        15: R('2.', 'o', '10k', 'o', '2.'),
+      },
+      // Читает книгу
+      book: {
+        13: R('.', 'o', 's', '4B', '2W', '4B', 's', 'o', '.'),
+        14: R('.', 'o', 'c', '4B', '2W', '4B', 'c', 'o', '.'),
+        15: R('2.', 'o', 'C', '3B', '2o', '3B', 'C', 'o', '2.'),
       },
     },
     legs: {
-      stand: () => {},
-      // Шаг: ноги врозь
-      walkA: (g) => {
-        clear(g, 5, 25, 14, 4);
-        rect(g, 6, 25, 4, 2, 'p');
-        rect(g, 14, 25, 4, 2, 'p');
-        rect(g, 6, 25, 1, 2, 'P');
-        rect(g, 5, 27, 5, 1, 'b');
-        rect(g, 14, 27, 5, 1, 'b');
-        hline(g, 5, 9, 28, 'q');
-        hline(g, 14, 18, 28, 'q');
+      stand: {},
+      walkA: {
+        17: R('2.', 'o', '2p', 'o', '4.', 'o', '2p', 'o', '2.'),
+        18: R('.', 'o', '3b', 'o', '4.', 'o', '3b', 'o', '.'),
       },
-      // Шаг: ноги вместе
-      walkB: (g) => {
-        clear(g, 5, 25, 14, 4);
-        rect(g, 9, 25, 6, 2, 'p');
-        rect(g, 9, 25, 1, 2, 'P');
-        rect(g, 8, 27, 8, 1, 'b');
-        hline(g, 8, 15, 28, 'q');
+      walkB: {
+        17: R('4.', 'o', '6p', 'o', '4.'),
+        18: R('4.', 'o', '6b', 'o', '4.'),
       },
     },
   };
 
-  const ORDER = ['eyes', 'mouth', 'sweat', 'arms', 'legs'];
-  const DEFAULTS = { eyes: 'open', mouth: 'neutral', sweat: 'no', arms: 'down', legs: 'stand' };
-
-  // Собрать кадр: frame({ eyes: 'blink', mouth: 'smile', arms: 'up', legs: 'walkA', sweat: 'yes' }) → массив строк
+  // Собрать кадр: frame({ eyes: 'blink', mouth: 'smile', arms: 'up', legs: 'walkA', sweat: 'yes' })
   function frame(opts = {}) {
-    const g = canvas();
-    body(g);
-    for (const key of ORDER) {
-      const variant = opts[key] || DEFAULTS[key];
-      const draw = PARTS[key][variant];
-      if (!draw) throw new Error(`Нет варианта ${key}=${variant}`);
-      draw(g);
+    const rows = BASE.slice();
+    const order = ['eyes', 'mouth', 'sweat', 'arms', 'legs'];
+    const defaults = { eyes: 'open', mouth: 'neutral', sweat: 'no', arms: 'down', legs: 'stand' };
+    for (const key of order) {
+      const variant = opts[key] || defaults[key];
+      const patch = PARTS[key][variant];
+      if (!patch) throw new Error(`Нет варианта ${key}=${variant}`);
+      for (const idx of Object.keys(patch)) rows[Number(idx)] = patch[idx];
     }
-    return outline(g).map((row) => row.join(''));
+    return rows;
   }
 
-  const api = { WIDTH, HEIGHT, HEAD_ROWS, PALETTE, PARTS, frame };
+  const HEAD_ROWS = 10; // голова с волосами — для иконки в трее
+  const api = { WIDTH, HEIGHT, HEAD_ROWS, PALETTE, BASE, PARTS, frame, R };
 
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.NazarSprites = api;

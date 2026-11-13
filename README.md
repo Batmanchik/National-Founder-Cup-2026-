@@ -104,7 +104,7 @@
 | Часть | Технология |
 |---|---|
 | Десктоп-приложение | Electron 44 (встроенные Node.js 24 и Chromium 152) |
-| Интерфейс | HTML, CSS и JavaScript без фреймворков, пиксель-арт 24×30 на Canvas: кадр собирается из слоёв, контур строится автоматически |
+| Интерфейс | HTML, CSS и JavaScript без фреймворков, пиксель-арт 16×19 на Canvas: кадр собирается из базового тела и накладок |
 | ИИ | Claude API (`@anthropic-ai/sdk`), по умолчанию модель `claude-opus-5-5`: structured outputs и vision |
 | Трекинг окна | PowerShell + WinAPI (Windows), AppleScript (macOS), xdotool (Linux), без нативных модулей |
 | Хранение | Локальный JSON `nazar-data.json` в папке данных приложения, базы данных нет |
@@ -269,7 +269,7 @@ src/
     panel.js            окно управления Nazar
   shared/               общий код для Node и браузера
     util.js             clamp, склонения, форматы времени, шаблоны
-    sprites.js          пиксель-арт Акыла 24×30: слои + автоматический контур
+    sprites.js          пиксель-арт Акыла 16×19: базовое тело + накладки
     raster.js           спрайт → пиксельный буфер (иконки)
     fsutil.js           надёжная запись JSON
   preload.js, panel-preload.js   безопасные мосты IPC
