@@ -52,8 +52,8 @@
     $('apiKey').placeholder = st.settings.hasKey ? 'Ключ сохранён. Впиши новый, чтобы заменить' : 'sk-ant-…';
     $('apiKey').disabled = !st.canEncrypt;
     $('ai-state').textContent = st.ai
-      ? 'ИИ подключён.'
-      : 'Сейчас работает офлайн-режим: Акыл понимает простые команды и использует шаблоны.';
+      ? 'Облачный ИИ подключён: свободный чат, разбор сомнительных окон и «зрение».'
+      : 'Всё основное уже работает на этом компьютере. Облачный ИИ по желанию добавит свободный чат, разбор YouTube и мессенджеров и «зрение».';
     const autoRow = $('autoStart').closest('label');
     $('autoStart').disabled = !st.canAutostart;
     autoRow.classList.toggle('off', !st.canAutostart);

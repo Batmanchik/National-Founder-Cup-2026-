@@ -378,12 +378,13 @@
     p.hidden = false;
     $('vision').disabled = !(state && state.ai);
     $('vision').checked = Boolean(state && state.vision);
-    $('vision-row').title = state && state.ai ? VISION_TIP : `${VISION_TIP} Нужен ключ Claude в окне Nazar.`;
+    $('vision-row').title = state && state.ai ? VISION_TIP : `${VISION_TIP} Это функция облачного ИИ: подключается в окне Nazar.`;
     $('strict').checked = Boolean(state && state.strictDefault);
     renderBet();
     setBetOpen(bet > 0); // ставка раскрыта, только если уже выбрана
     // Техническая строка внизу — коротко; подробности в окне Nazar.
-    const foot = [state && state.ai ? `ИИ: ${state.model}` : 'офлайн-режим: ключ Claude — в окне Nazar'];
+    // Ядро работает на устройстве; облако — лишь добавка, поэтому без него ничего «урезанного» не пишем.
+    const foot = [state && state.ai ? '☁ облачный ИИ подключён' : '💻 всё работает на этом компьютере'];
     if (state && !state.trackingSupported) foot.push('окна не отслеживаются, демо — в трее');
     $('ai-hint').textContent = foot.join(' · ');
     renderSummary();
@@ -497,7 +498,7 @@
     }
     const c = panels.chat;
     c.hidden = !c.hidden;
-    $('chat-mode').textContent = state.ai ? 'ИИ' : 'офлайн';
+    $('chat-mode').textContent = state.ai ? '+ облако' : '';
     $('voice-toggle').textContent = voiceOn ? '🔊' : '🔇';
     if (!c.hidden) {
       bubble.hidden = true;

@@ -237,7 +237,7 @@ function offlineChat(text, ctx) {
   }
   if (/привет|салем|сәлем|hi\b|hello/.test(t)) return { reply: `Салем! Держим курс на «${ctx.goal}».`, action: 'none', minutes: 0 };
   return {
-    reply: `Я офлайн-версия, но слежу за целью «${ctx.goal}». Напиши «что умеешь» или добавь ключ Claude — стану умнее.`,
+    reply: `Не понял 🤔 Напиши «что умеешь» — покажу команды. А цель всё та же: «${ctx.goal}», давай-давай!`,
     action: 'none',
     minutes: 0,
   };

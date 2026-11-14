@@ -645,3 +645,7 @@ button.go {
   font-size: 13px;
   color: #777;
 }
+
+.tag:empty {
+  display: none;
+}
